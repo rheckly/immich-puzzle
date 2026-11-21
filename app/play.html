@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{TITLE}}</title>
+<link rel="icon" type="image/svg+xml" href="{{ROOT}}favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ROOT}}brand/favicon-puzzle.png">
+<link rel="apple-touch-icon" href="{{ROOT}}brand/apple-touch-icon-puzzle.png">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#16191b">
+{{OG}}
+{{UMAMI}}
+<style>
+/* Empfängerseite: dunkel, grosses ▶, das Puzzle läuft live auf dem Canvas (Mockup «Empfänger») */
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:#16191b; color:#eee; font:15px/1.45 system-ui,"Segoe UI",sans-serif; overflow:hidden; }
+#stage { position:fixed; inset:0; }
+#stage canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+#start { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(10,12,14,.55); cursor:pointer; border:0; color:#fff; font:inherit; width:100%; }
+#start .big { width:96px; height:96px; border-radius:50%; background:rgba(255,255,255,.95); color:#16191b; display:grid; place-items:center; font-size:38px; padding-left:8px; box-shadow:0 8px 30px rgba(0,0,0,.5); transition:transform .15s; }
+#start:hover .big, #start:focus-visible .big { transform:scale(1.06); }
+#start .t { font-size:20px; font-weight:600; text-align:center; padding:0 20px; text-shadow:0 2px 8px rgba(0,0,0,.6); }
+#start .s { font-size:14px; color:#ccc; }
+#title { position:absolute; left:0; right:0; top:max(18px, env(safe-area-inset-top)); text-align:center; padding:0 112px; opacity:0; transition:opacity 1s; pointer-events:none; }
+#title.on { opacity:1; }
+#title h1 { margin:0; font-size:clamp(20px, 4vw, 30px); font-weight:650; text-shadow:0 2px 10px rgba(0,0,0,.7); }
+#title p { margin:4px 0 0; font-size:14px; color:#ccc; text-shadow:0 1px 6px rgba(0,0,0,.7); }
+#bar { position:absolute; left:50%; bottom:max(18px, env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; gap:10px; opacity:0; transition:opacity .6s; pointer-events:none; flex-wrap:wrap; justify-content:center; width:max-content; max-width:94vw; }
+#bar.on { opacity:1; pointer-events:auto; }
+#bar button, #bar a { font:inherit; font-size:14px; padding:9px 16px; border-radius:999px; border:1px solid rgba(255,255,255,.3); background:rgba(20,22,24,.75); color:#fff; cursor:pointer; text-decoration:none; backdrop-filter:blur(6px); }
+#bar button:hover, #bar a:hover { background:rgba(60,64,68,.85); }
+#err { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:20px; color:#ccc; }
+#mute, #speed { position:absolute; right:max(14px, env(safe-area-inset-right)); top:max(14px, env(safe-area-inset-top)); width:40px; height:40px; border-radius:50%; border:1px solid rgba(255,255,255,.3); background:rgba(20,22,24,.6); color:#fff; font-size:17px; cursor:pointer; padding:0; }
+#speed { right:calc(max(14px, env(safe-area-inset-right)) + 48px); font-size:14px; font-weight:600; }
+@media (max-width:420px) { #title { padding:0 16px; top:calc(max(14px, env(safe-area-inset-top)) + 50px); } }  /* Handy: Titel unter die Knöpfe */
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="title"><h1 id="tTitle"></h1><p id="tSub"></p></div>
+<button id="speed" class="hidden" type="button" title="Tempo" data-i18n-title="play.speed" aria-label="Tempo" data-i18n-aria-label="play.speed">1×</button>
+<button id="mute" class="hidden" type="button" title="Ton" data-i18n-title="play.sound" aria-label="Ton" data-i18n-aria-label="play.sound">🔊</button>
+<button id="start" type="button" class="hidden"><span class="big" aria-hidden="true">▶</span><span class="t" id="sTitle"></span><span class="s" id="sSub"></span></button>
+<div id="bar">
+  <button id="again" type="button" data-i18n="play.again">Nochmals</button>
+  <button id="sound" type="button" data-i18n="play.sound">Ton</button>
+  <a id="dl" class="hidden" href="download" data-i18n="play.download">Foto herunterladen</a>
+</div>
+<div id="err" class="hidden"></div>
+<audio id="audio" preload="auto"></audio>
+
+{{I18N}}<script src="{{ROOT}}puzzle-engine.js?v={{VERSION}}"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const P = new Puzzle($("cv")), audio = $("audio");
+let view = null, playing = false, last = 0, muted = false, speed = 1, synced = true;
+const SPEEDS = [1, 2, 4];  // Tempo 1×/2×/4×; die Musik läuft immer in normalem Tempo (Roger 21.11.2026, 0.1.4)
+
+function show(id, on) { $(id).classList.toggle("on", on); }
+function subline() {
+  const parts = [];
+  if (view.by) parts.push(t("play.by", { by: view.by }));
+  if (view.meta) parts.push([view.meta.date ? fmtDate(view.meta.date) : "", view.meta.place || ""].filter(Boolean).join(" · "));
+  return parts.filter(Boolean).join(" · ");
+}
+function drawTexts() {
+  if (!view) return;
+  const title = view.title || "Puzzle";
+  $("sTitle").textContent = title; $("tTitle").textContent = title;
+  $("sSub").textContent = view.by ? t("play.by", { by: view.by }) : t("play.tap");
+  $("tSub").textContent = subline();
+  $("sound").textContent = t(muted ? "play.soundOn" : "play.soundOff");
+  $("mute").textContent = muted ? "🔇" : "🔊";
+  $("speed").textContent = speed + "×";
+}
+function vol(tt) { return muted || !view.music ? 0 : musicVolume(tt, P.cfg.T, view.music.volume, view.music.fade); }
+function loop(ts) {
+  if (!playing) return;
+  const dt = Math.min(.1, (ts - last) / 1000) * speed; last = ts;
+  let tt = P.t + dt;
+  if (synced && view.music && !audio.paused && Math.abs(audio.currentTime - tt) > .3 && audio.currentTime > 0) tt = audio.currentTime;  // im Takt mit der Musik
+  if (tt >= P.cfg.T) { tt = P.cfg.T; playing = false; audio.pause(); }
+  P.draw(tt);
+  audio.volume = clamp(vol(tt), 0, 1);
+  if (!playing) show("bar", true);
+  else requestAnimationFrame(loop);
+}
+function play() {
+  // Titel steht von Anfang an oben (Roger 21.11.2026, 0.1.4)
+  $("start").classList.add("hidden"); show("bar", false); show("title", true); $("speed").classList.remove("hidden");
+  P.t = 0; P.draw(0); playing = true; last = performance.now(); synced = speed === 1;
+  if (view.music) { $("mute").classList.remove("hidden"); audio.currentTime = 0; audio.muted = muted; audio.volume = clamp(vol(0), 0, 1); audio.play().catch(() => {}); }
+  requestAnimationFrame(loop);
+}
+function toggleSound() {
+  // audio.muted statt nur Lautstärke 0: auf iPhone/iPad lässt sich die Lautstärke nicht per Code ändern
+  muted = !muted; audio.muted = muted; if (P.cfg) audio.volume = clamp(vol(P.t), 0, 1);
+  if (!muted && playing && view.music && audio.paused) { audio.currentTime = P.t; audio.play().catch(() => {}); }
+  drawTexts();
+}
+$("start").onclick = play;
+$("again").onclick = play;
+$("sound").onclick = toggleSound;
+$("mute").onclick = toggleSound;
+$("speed").onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; synced = false; drawTexts(); };
+window.addEventListener("resize", () => { if (P.cfg) P.resize(); });
+onLang(drawTexts);
+applyI18n();
+
+(async () => {
+  try {
+    const res = await fetch("puzzle.json", { cache: "no-store" });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(srvText(d, "error") || `HTTP ${res.status}`); }
+    view = await res.json();
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error(t("play.imgFailed"))); i.src = "photo.jpg"; });
+    await loadFont(view.config.textFont);  // Collage-Schrift erst laden, sonst zeichnet das Canvas die Ersatzschrift
+    P.setup(puzzleConfig({ ...view.config, title: view.title }, img)); P.draw(0);
+    if (view.music) { audio.src = "music"; audio.load(); } else $("sound").classList.add("hidden");
+    $("dl").classList.toggle("hidden", !view.download);
+    drawTexts(); $("start").classList.remove("hidden"); $("start").focus();
+  } catch (e) {
+    $("err").textContent = e.message || String(e); $("err").classList.remove("hidden");
+  }
+})();
+</script>
+</body>
+</html>

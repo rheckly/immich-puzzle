@@ -1,0 +1,2008 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puzzle</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-puzzle.png">
+{{UMAMI}}
+{{OG}}
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon-puzzle.png">
+<script>
+// Steht vor dem Stil, damit die Seite beim Laden nicht kurz hell aufblitzt
+function applyTheme() {
+  const choice = localStorage.getItem("theme");
+  const dark = choice === "dark" || (choice !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+applyTheme();
+</script>
+<link rel="stylesheet" href="/common.css?v={{VERSION}}">
+<style>
+/* Nach dem Mockup docs/design/mockups/puzzle/puzzle.html (Smart Albums), Tokens wie Collage */
+:root { color-scheme:light; --bg:#f4f4f2; --card:#fff; --text:#23272b; --muted:#667; --line:#dcdcd8; --accent:#2f6f8f; --on-accent:#fff; --err:#a4262c; --ok:#2e7d32; }
+:root[data-theme=dark] { color-scheme:dark; --bg:#17191b; --card:#222528; --text:#e8e8e6; --muted:#a0a4a8; --line:#3a3e42; --accent:#6db3d6; --on-accent:#111; --err:#ff8a8f; --ok:#7fd18b; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,"Segoe UI",sans-serif; }
+button { font:inherit; padding:7px 13px; border-radius:5px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; }
+button.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:600; }
+button.danger { color:var(--err); }
+button:disabled { opacity:.5; cursor:default; }
+input[type=text], input[type=password], input[type=search], select, textarea { width:100%; padding:6px 8px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:5px; font:inherit; }
+textarea { resize:vertical; }
+select { min-height:2.3em; }
+label.lbl { display:block; margin:8px 0 3px; font-size:13px; color:var(--muted); }
+.muted { color:var(--muted); font-size:13px; }
+.error { color:var(--err); font-size:13px; }
+.hidden { display:none !important; }
+input.sw{appearance:none;-webkit-appearance:none;flex:none;position:relative;width:40px;height:24px;margin:0;border:0;border-radius:999px;background:color-mix(in srgb,var(--muted) 45%,var(--card));cursor:pointer;transition:background .15s}
+input.sw::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+input.sw:checked{background:var(--accent)} input.sw:checked::after{transform:translateX(16px)}
+input.sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input.sw:disabled{opacity:.75;cursor:default}
+label.swRow { display:flex; align-items:center; gap:10px; margin:10px 0 4px; cursor:pointer; }
+label.swRow > span { flex:1; }
+.tabs { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; margin:0 0 10px; }
+.tabs button { flex:1; border:0; border-radius:0; margin:0; padding:8px 10px; background:var(--bg); color:inherit; font-size:15px; }
+.tabs button[aria-selected="true"] { background:var(--accent); color:var(--on-accent); font-weight:600; }
+.tabs.sm button { padding:6px 4px; font-size:14px; }
+.btnRow { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; } .btnRow > button { flex:1 1 0; }
+button.cpy { padding:3px 6px; line-height:0; vertical-align:middle; }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); }
+header h1 { margin:0; font-size:18px; }
+section.box { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:14px; }
+.boxTitle { margin:0 0 8px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:6px; }
+.boxTitle .tick { display:none !important; }  /* Häkchen links entfernt, Stand zeigt die Pfeilkette in der Vorschau (0.1.4) */
+.boxTitle .num { display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%; background:var(--bg); border:1px solid var(--line); font-size:12px; }
+.boxTitle .grow { flex:1; }
+.paneHead { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+.paneHead h2 { margin:0; font-size:18px; flex:1; }
+/* Boxen «Einstellungen» und «Über» wie Collage: Titel, «>» öffnet rechts das Panel (statt der Vorschau) */
+section.box .boxHead { margin:0; }
+section.box .boxHead .boxTitle { margin:0; }
+section.box .boxHead + p { margin:4px 0 0; }
+.paneHead .paneX { padding:1px 9px; font-size:18px; line-height:1.2; }
+.side .doneRow { margin-top:16px; }
+.paneSection.first { margin-top:0; padding-top:0; border-top:0; }
+
+/* Meine Puzzles */
+.plist { display:flex; flex-direction:column; gap:5px; }
+.pitem { display:flex; align-items:center; gap:10px; padding:5px 6px; border:1px solid var(--line); border-radius:6px; background:var(--bg); cursor:pointer; text-align:left; }
+.pitem.on { border-left:3px solid var(--accent); }
+.pitem.sel { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.pitem .go { color:var(--muted); font-size:18px; flex:none; }
+#histSearch { margin-bottom:8px; }
+/* Startboxen wie Collage: «Was möchtest du heute erstellen?» und «Bisherige Puzzles» */
+#kindBox .btnRow { margin-top:0; }
+#familyBtn.on { border-color:var(--accent); }
+.famRow { display:flex; gap:10px; align-items:center; padding:8px; margin-bottom:8px; border:1px solid var(--line); border-radius:6px; color:inherit; text-decoration:none; }
+a.famRow:hover,a.famRow:focus-visible { border-color:var(--accent); }
+.famRow.on { border-color:var(--accent); }
+.famIcon { width:32px; height:32px; flex:none; display:grid; place-items:center; }
+.famIcon img { width:32px; height:32px; display:block; }
+.famIcon .logoDark, :root[data-theme=dark] .famIcon .logoLight { display:none; }
+:root[data-theme=dark] .famIcon .logoDark { display:block; }
+.famLetter { width:32px; height:32px; display:grid; place-items:center; border-radius:6px; background:var(--accent); color:var(--on-accent); font-weight:600; }
+.famLetter[hidden] { display:none; }
+.famText { flex:1; min-width:0; }
+.famText strong { display:block; font-weight:600; overflow-wrap:anywhere; }
+.famSub { display:block; color:var(--muted); font-size:13px; }
+.famHere { flex:none; color:var(--muted); font-size:12px; }
+.famGo { color:var(--muted); font-size:18px; }
+/* Detail-Panel eines Puzzles */
+#pzCanvas { width:100%; aspect-ratio:4/3; border-radius:6px; background:#16191b; display:block; }
+#pzHint { font-size:13px; margin:8px 0 0; }
+#sidePuzzle .btnRow { flex-wrap:wrap; }
+#sidePuzzle .btnRow button { flex:1 1 auto; white-space:nowrap; }
+.pzGrid { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:13px; margin:8px 0 0; }
+.pzGrid dt { color:var(--muted); }
+.pzGrid dd { margin:0; overflow-wrap:anywhere; }
+.pzHead { font-size:14px; font-weight:600; margin:16px 0 0; padding-top:12px; border-top:1px solid var(--line); }
+.pitem img { width:52px; height:38px; object-fit:cover; border-radius:3px; flex:none; background:#111; }
+.pitem .t { flex:1; min-width:0; }
+.pitem .t b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pitem .t span { font-size:12px; color:var(--muted); }
+
+/* Motiv */
+.srcList { max-height:180px; overflow:auto; border:1px solid var(--line); border-radius:5px; margin-top:6px; }
+.srcList button { display:flex; width:100%; gap:8px; border:0; border-bottom:1px solid var(--line); border-radius:0; background:var(--card); text-align:left; padding:6px 8px; font-size:14px; }
+.srcList button span:first-child { flex:1; }
+.srcList button.on { background:color-mix(in srgb,var(--accent) 15%,var(--card)); font-weight:600; }
+.thumbs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; max-height:330px; overflow:auto; }
+.th { position:relative; aspect-ratio:1; border-radius:4px; overflow:hidden; background:#111; cursor:pointer; padding:0; border:0; }
+.th img { width:100%; height:100%; object-fit:cover; display:block; }
+.th.on { outline:3px solid var(--accent); outline-offset:-3px; }
+.drop { display:flex; flex-direction:column; align-items:center; gap:4px; padding:16px; border:1px dashed var(--line); border-radius:6px; background:var(--bg); color:var(--muted); font-size:13px; cursor:pointer; text-align:center; }
+.drop strong { color:var(--text); font-size:15px; }
+.drop.over { border-color:var(--accent); }
+.motifNow { display:flex; gap:10px; align-items:center; margin-top:10px; font-size:13px; }
+.motifNow img { width:64px; height:48px; object-fit:cover; border-radius:3px; }
+
+/* Teile */
+.counts { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+.counts button { flex:1; border:0; border-radius:0; padding:7px 0; background:var(--bg); color:inherit; font-size:14px; }
+.counts button.on { background:var(--accent); color:var(--on-accent); font-weight:600; }
+.startPick { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.startPick button { display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 4px; font-size:13px; }
+.startPick button svg { width:56px; height:34px; }
+.startPick button.on { border:2px solid var(--accent); padding:5px 3px; font-weight:600; }
+input[type=range] { width:100%; accent-color:var(--accent); }
+.rangeLbl { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:-2px; }
+
+/* Musik */
+#tracks { max-height:240px; overflow:auto; }
+.track { display:flex; align-items:center; gap:10px; padding:6px 8px; border:1px solid var(--line); border-radius:5px; margin-bottom:5px; cursor:pointer; font-size:14px; background:var(--bg); }
+.track.on { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.track .t { flex:1; min-width:0; overflow-wrap:anywhere; }
+.track .t small { display:block; color:var(--muted); font-size:11px; }
+.track .d { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
+.track .pl { width:26px; height:26px; padding:0; border-radius:50%; font-size:11px; flex:none; }
+.track .nopl { width:26px; text-align:center; flex:none; }
+
+/* Vorschau */
+.tableWrap { position:relative; width:100%; aspect-ratio:16/10; border-radius:6px; overflow:hidden; background:#111; }
+.tableWrap canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+.tableWrap .empty { position:absolute; inset:0; display:grid; place-items:center; color:#aaa; font-size:14px; text-align:center; padding:20px; }
+.player { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.player .pp { width:38px; padding:6px 0; font-size:15px; }
+.player input[type=range] { flex:1; }
+.player .time { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.player select { width:auto; padding:4px 6px; min-height:0; font-size:13px; }
+.stats { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:8px; font-size:13px; color:var(--muted); }
+.stats b { color:var(--text); font-weight:600; }
+.chartWrap { margin-top:10px; }
+.chartWrap .cap { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:2px; }
+#chart { width:100%; height:64px; display:block; background:var(--bg); border:1px solid var(--line); border-radius:5px; }
+
+/* Teilen */
+.linkRow { display:flex; align-items:center; gap:6px; margin:10px 0 4px; font-size:13px; }
+.linkRow code { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:5px 8px; background:var(--bg); border:1px solid var(--line); border-radius:5px; }
+.ogCard { display:flex; gap:10px; margin-top:10px; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--bg); font-size:13px; }
+.ogCard img { flex:none; width:96px; height:50px; object-fit:cover; border-radius:6px; }
+.ogCard strong { display:block; }
+#pwRow { display:flex; gap:8px; margin:4px 0 6px; } #pwRow input { flex:1; min-width:0; }
+#txtCol .col { width:30px; height:30px; padding:0; border-radius:50%; border:1px solid var(--line); }
+#txtCol .col.on { box-shadow:0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
+#toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); max-width:min(560px,92vw); padding:10px 14px; border-radius:8px; background:#23272b; color:#fff; font-size:13px; box-shadow:0 6px 24px rgba(0,0,0,.35); opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
+#toast.on { opacity:1; }
+#toast.bad { background:#a4262c; }
+
+/* Geteilte Puzzles (wie Collage «Geteilte Collagen»), dazu ein Panel «Details» pro Link */
+#shareTools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+#shareFilter { display:inline-flex; gap:4px; }
+#shareFilter button, #sharesPurge { padding:4px 10px; font-size:13px; }
+#shareFilter button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+#shareList { display:flex; flex-direction:column; gap:6px; }
+.shareRow { display:flex; gap:10px; align-items:flex-start; padding:8px; border:1px solid var(--line); border-radius:5px; }
+.shareRow.on { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.shareRow > img { width:64px; height:48px; object-fit:cover; border-radius:3px; background:#111; flex:none; }
+.shareRow .shareMain { flex:1; min-width:0; }
+.shareRow .shareTitle { display:flex; align-items:center; gap:4px; }
+.shareRow strong { display:block; min-width:0; font-weight:600; overflow-wrap:anywhere; }
+.shareFacts { display:block; color:var(--muted); font-size:13px; }
+.shareRow .shareActions { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.shareRow .shareActions button, .shareRow .shareActions select, .shareRow .shareActions input { width:auto; margin:0; padding:3px 8px; font-size:13px; min-height:0; }
+.shareRow.expired > img, .shareRow.expired strong, .shareRow.expired .shareFacts,
+.shareRow.off > img, .shareRow.off strong, .shareRow.off .shareFacts { opacity:.55; }
+.shareRow .shareActive { display:flex; align-items:center; gap:8px; margin-top:6px; font-size:13px; cursor:pointer; }
+.shareRow .shareActions .detailBtn { margin-left:auto; }
+#shDetailThumb { width:100%; max-height:200px; object-fit:contain; border-radius:6px; background:#111; display:block; }
+#shPwRow { display:flex; gap:8px; margin:4px 0 6px; } #shPwRow input { flex:1; min-width:0; }
+#shUntil { margin-top:6px; }
+main { display:flex; gap:16px; align-items:flex-start; padding:16px 20px 32px; overflow-x:auto; }
+.left { flex:0 0 clamp(300px,32vw,380px); min-width:0; }
+.pane { min-width:0; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+@media (max-width:860px) {
+  main { flex-direction:column; padding:12px; gap:0; }
+  .left { width:100%; flex:none; }
+  .tableWrap { aspect-ratio:4/5 !important; }
+  body:not(.deep) .mkP.on { order:-1 !important; }
+}
+.mkMotif { display:flex; gap:10px; align-items:center; margin-top:8px; }
+.mkMotif img { width:96px; height:72px; object-fit:cover; border-radius:4px; flex:none; }
+.mkMotif strong { display:block; font-weight:600; }
+.mkMotif .muted { font-size:13px; }
+.mkSrc { margin-top:0; }
+.mkInRow { display:flex; gap:8px; } .mkInRow input { flex:1; min-width:0; margin:0; } .mkInRow button { margin:0; flex:none; }
+.mkTabs { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 10px; }
+.mkTab { margin:0; } .mkTab.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+.mkFind { width:100%; margin:0 0 8px; }
+.mkAlb { width:100%; border-collapse:collapse; font-size:14px; }
+.mkAlb th, .mkAlb td { padding:6px; border-bottom:1px solid var(--line); text-align:left; }
+.mkAlb th { color:var(--muted); font-weight:600; }
+.mkAlb .n { text-align:right; white-space:nowrap; } .mkAlb td:nth-child(3) { white-space:nowrap; color:var(--muted); }
+.mkAlb td.go { width:1%; padding-right:0; } .mkGo { margin:0; padding:1px 9px; font-weight:600; }
+.mkAlb tr.sel td { background:color-mix(in srgb, var(--accent) 12%, transparent); }
+.mkAlb tr.sel .mkGo { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+.mkGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+.mkGrid img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px; cursor:pointer; }
+.mkGrid img.on { outline:3px solid var(--accent); outline-offset:-3px; }
+@media (max-width:860px) { .mkGrid { grid-template-columns:repeat(3,1fr); } }
+/* Bühne wie Mockup «Geteilte Links»: Startspalte links, offene Panels rechts daneben */
+main { overflow-x:auto; }
+main > .left { flex:0 0 clamp(300px,32vw,380px); }
+.mkP { display:none; }
+.mkP.on { display:flex; flex-direction:column; flex:0 0 480px; width:480px; position:static; overflow:auto;
+  height:calc(100vh - var(--barH, 90px) - 40px); height:calc(100dvh - var(--barH, 90px) - 40px); }  /* bildschirmhoch (0.1.4) */
+#previewPane.on, #welcomePane.on { flex-basis:620px; width:620px; }
+/* Vorschau füllt auf dem Computer die Restbreite; Bühne so gross, dass alles ohne Scrollen ins Panel passt (Roger 21.11.2026, 0.1.4) */
+#previewPane.on { flex:1 0 620px; width:auto; }
+/* Panels laufen beim Scrollen mit und stehen am Schluss unten bündig mit der Startspalte, wie Collage (Roger 21.11.2026, 0.1.4) */
+@media (min-width:861px) { main { overflow:visible; padding-bottom:16px; } main > .left > :last-child { margin-bottom:0; } main > .mkP.on { position:sticky; top:16px; height:calc(100vh - var(--paneTop, 106px) - 16px); height:calc(100dvh - var(--paneTop, 106px) - 16px); } }  /* main ohne eigenes Scrollen, sonst greift sticky nicht */
+@media (min-width:861px) { #previewPane .tableWrap { width:min(100%, calc((100vh - var(--barH, 90px) - 460px) * 1.6)); width:min(100%, calc((100dvh - var(--barH, 90px) - 460px) * 1.6)); min-width:min(100%, 560px); margin:0 auto; } }
+/* P28 Willkommen (Roger 21.11.2026, wie Smart Albums 1.0.87) */
+.hmHero { display:flex; align-items:center; gap:18px; margin:6px 0 4px; } .hmHero img { width:64px; height:64px; flex:none; }
+.hmHero .dk { display:none; } :root[data-theme=dark] .hmHero .lt { display:none; } :root[data-theme=dark] .hmHero .dk { display:block; }
+.hmHero h3 { margin:0; font-size:22px; letter-spacing:.06em; text-transform:uppercase; } .hmHero p { margin:4px 0 0; max-width:62ch; }
+#welcomePane h4 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:24px 0 10px; }
+.hmSteps { display:grid; grid-template-columns:1fr; gap:10px; }
+.hmStep { border:1px solid var(--line); border-radius:8px; padding:12px 14px; display:flex; gap:12px; } .hmStep p { margin:2px 0 0; font-size:14px; }
+.hmStep .n { flex:none; width:28px; height:28px; border-radius:50%; background:color-mix(in srgb, var(--accent) 15%, transparent); color:var(--accent); display:grid; place-items:center; font-weight:700; }
+.hmTiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:10px; }
+button.hmTile { margin:0; display:flex; flex-direction:column; align-items:flex-start; text-align:left; padding:10px 12px; border-radius:8px; }
+button.hmTile:hover { border-color:var(--accent); } .hmTile .v { font-size:22px; font-weight:700; } .hmTile .l { color:var(--muted); font-size:13px; }
+ul.hmLog { list-style:none; margin:0; padding:0; } ul.hmLog li { padding:6px 0; border-bottom:1px solid var(--line); display:flex; gap:12px; }
+ul.hmLog .t { color:var(--muted); flex:none; min-width:130px; font-size:14px; }
+.hmFoot { margin-top:20px; }
+.mkP > .paneHead { position:sticky; top:-12px; z-index:3; background:var(--card); margin:-12px -14px 10px; padding:12px 14px 8px; }
+.mkP .doneRow { margin-top:auto; }
+/* Fusszeile fest unten, Inhalt scrollt darunter durch (0.1.4) */
+.mkP.on > * { flex-shrink:0; }
+.mkP > .doneRow { position:sticky; bottom:-12px; z-index:3; background:var(--card); margin:auto -14px -12px; padding:10px 14px 12px; border-top:1px solid var(--line); }
+.mkP.top { box-shadow:0 0 0 2px var(--accent); }
+/* Schritt-Panels: unten «‹ Vorheriger · Nächster › · Fertig» (Roger 21.11.2026, 0.1.6) */
+.stepRow > button { flex:1 1 0; min-width:0; margin:0; padding-left:6px; padding-right:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stepRow .sm { display:none; }
+/* Handy: nur « und » für Vorheriger/Nächster, «Fertig» bekommt den Platz (Roger 21.11.2026, 0.1.6) */
+@media (max-width:860px) { .stepRow > .stepPrev, .stepRow > .stepNext { flex:0 0 52px; font-size:20px; line-height:1; } .stepRow .lg { display:none; } .stepRow .sm { display:inline; } }
+.stepRow > .invisible { visibility:hidden; }
+body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Startansicht: keine Fusszeile */
+.mkStep .mkSum { margin:6px 0 0; font-size:13px; }
+.mkP > .mkBody > .lbl:first-child, .mkP > .mkBody > :first-child { margin-top:0; }
+@media (max-width:860px) {
+  /* iPhone: nichts darf seitwärts wackeln, auch nicht während ein Panel seitwärts gleitet (Roger 21.11.2026, 0.1.6) */
+  html { overflow-x:clip; } body { touch-action:pan-y pinch-zoom; }  /* nur html: overflow auf body machte ihn in Safari zum eigenen Scrollbereich */
+  /* Offener Schritt: Kopfzeile oben festhalten, Panel direkt darunter – unabhängig davon, wie weit die Seite gescrollt ist (iPhone, Roger 21.11.2026) */
+  body.deep header { position:fixed; top:0; left:0; right:0; z-index:42; }
+  body.deep .mkP.on.top, body.deep .mkP.on.top .mkBody { overscroll-behavior:contain; }
+  /* Vorschau hat keinen .mkBody: Safari staucht sonst Tisch und Diagramm im festen Panel zusammen, statt zu scrollen */
+  body.deep #previewPane.on.top > * { flex-shrink:0; } body.deep #previewPane.on.top > .doneRow { margin-top:auto; }
+  main { overflow:visible; }
+  main > .left { flex:none; width:100%; }
+  body:not(.deep) #welcomePane.on, body:not(.deep) #previewPane.on { display:block; width:100%; max-height:none; height:auto; order:-1; margin-bottom:14px; }
+  body.deep { overflow:hidden; }
+  body.deep .mkP.on { display:none; }
+  body.deep .mkP.on.top { display:flex; position:fixed; left:0; right:0; bottom:0; top:var(--barH, 90px); z-index:40; width:auto;
+    max-height:none; height:auto; border:0; border-radius:0; box-shadow:none; padding-bottom:max(12px, env(safe-area-inset-bottom)); }
+  .mkP input, .mkP select, .mkP textarea { font-size:16px; }
+  /* Seitwärts wie in iPhone-Apps: tiefer bzw. «Nächster» kommt von rechts, Schliessen und «Vorheriger» gehen nach rechts (Roger 21.11.2026, 0.1.6) */
+  body.deep .mkP.on.top.pzIn { animation:pzInR .25s ease-out; } body.deep .mkP.on.top.pzIn.fromL { animation-name:pzInL; }
+  .mkP.pzLeave { display:flex !important; position:fixed; left:0; right:0; bottom:0; z-index:41; width:auto; max-height:none; height:auto;
+    border:0; border-radius:0; box-shadow:none; pointer-events:none; animation:pzOutR .25s ease-in forwards; }
+  .mkP.pzLeave.toL { animation-name:pzOutL; }
+}
+@keyframes pzInR { from { transform:translateX(100%); } } @keyframes pzInL { from { transform:translateX(-30%); opacity:.6; } }
+@keyframes pzOutR { to { transform:translateX(100%); } } @keyframes pzOutL { to { transform:translateX(-30%); opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .mkP.pzIn, .mkP.pzLeave { animation:none !important; } .mkP.pzLeave { display:none !important; } }
+.shareRow.on { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px; }
+.btnRow.mkEven { display:flex; gap:12px; margin-top:12px; } .btnRow.mkEven button { flex:1; margin:0; }
+#settingsBody .shareUrlForm + .muted { margin-top:14px; }
+.shareRow .shareTitle .mkDetail { margin:0 0 0 auto; flex:none; }
+.shareRow.on .mkDetail { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+/* P19 Motiv bearbeiten (nach Mosaik «Motiv zuschneiden und drehen») */
+.mkThumb { position:relative; line-height:0; flex-shrink:0; }
+.mkCropBtn { position:absolute; left:2px; bottom:2px; height:auto; margin:0; padding:2px 4px; line-height:0; border-radius:4px; }
+.mkCropBtn svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.mkRow { display:flex; width:100%; gap:8px; align-items:center; margin:10px 0 0; padding:8px 10px; height:auto; text-align:left; }
+.mkRow span:first-child { font-weight:600; }
+.mkRow b { margin-left:auto; font-size:16px; }
+.mkFmt { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 6px; }
+.mkFmt button { margin:0; padding:4px 10px; display:inline-flex; align-items:center; gap:6px; }
+.mkAr { display:inline-block; border:1.5px solid currentColor; border-radius:2px; box-sizing:border-box; }
+.mkAr.free { border-style:dashed; }
+#cropStage img { position:absolute; max-width:none; cursor:grab; touch-action:none; }
+#sideCrop #cropStage { max-width:100%; flex:none; }
+#cropStage.drag img, #cropStage.drag #cropFrame { cursor:grabbing; }
+#cropFrame { pointer-events:none; } #cropFrame i { pointer-events:auto; }
+.mkZoom { display:flex; align-items:center; gap:10px; margin-top:8px; } .mkZoom input { flex:1; margin:0; }
+.mkFmt button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+#sideCrop .mkNote { margin:0 0 10px; }
+
+#cropFrame.free { border-style:dashed; }
+/* P8 Ablauf (Roger 21.11.2026) */
+.mkProg { margin:0 0 12px; } .mkProg > .muted { display:block; font-size:12px; margin:0 0 6px; }
+/* Ablauf als Pfeilkette auf einer Zeile: grün erledigt, rot offen (Roger 21.11.2026, 0.1.4) */
+.mkProg { --pzDone:#3f9a2f; --pzOpen:#c00000; --pzTip:10px; }
+.mkProg ol { list-style:none; margin:0; padding:0; display:flex; flex-wrap:nowrap; }
+.mkProg li { flex:1 1 0; min-width:0; } .mkProg li + li { margin-left:calc(3px - var(--pzTip)); }
+.mkProg button { width:100%; height:44px; margin:0; border:0; border-radius:0; padding:0 5px 0 calc(var(--pzTip) + 3px);
+  background:var(--pzOpen); color:#fff; font-size:11.5px; font-weight:600; line-height:1.15; text-align:center; hyphens:auto;
+  clip-path:polygon(0 0, calc(100% - var(--pzTip)) 0, 100% 50%, calc(100% - var(--pzTip)) 100%, 0 100%, var(--pzTip) 50%); }
+.mkProg li:first-child button { padding-left:8px; clip-path:polygon(0 0, calc(100% - var(--pzTip)) 0, 100% 50%, calc(100% - var(--pzTip)) 100%, 0 100%); }
+.mkProg button span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.mkProg .done button { background:var(--pzDone); }
+.mkProg .next button { text-decoration:underline; text-underline-offset:3px; }
+.mkProg button:hover, .mkProg button:focus-visible { filter:brightness(1.15); }
+@media (max-width:560px) { .mkProg ol { overflow-x:auto; scrollbar-width:none; } .mkProg li { flex:0 0 76px; } }
+/* P8 Website-Titel (Roger 21.11.2026) */
+.mkPvTitle { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 8px; }
+.mkPvTitle .tab { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:4px 12px; border:1px solid var(--line); border-bottom:0; border-radius:8px 8px 0 0; background:var(--bg2, rgba(0,0,0,.04)); }
+.mkPvTitle .tab i { flex:none; width:12px; height:12px; border-radius:3px; background:var(--accent); }
+.mkPvTitle .tab b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.mkPvTitle .muted { font-size:12px; }
+/* P5 Schriftzug (Roger 21.11.2026) */
+.mkTxtPrev { position:relative; aspect-ratio:3896/2754; max-height:240px; margin:0 auto; border-radius:6px; overflow:hidden; background:#111; }
+.mkTxtPrev img { width:100%; height:100%; object-fit:cover; display:block; }
+.mkTxtBox { position:absolute; inset:0; display:flex; padding:6%; pointer-events:none; }
+.mkTxtBox span { line-height:1.15; max-width:100%; overflow-wrap:anywhere; }
+.mkTxtBox.pos-tl, .mkTxtBox.pos-tc, .mkTxtBox.pos-tr { align-items:flex-start; }
+.mkTxtBox.pos-ml, .mkTxtBox.pos-mc, .mkTxtBox.pos-mr { align-items:center; }
+.mkTxtBox.pos-bl, .mkTxtBox.pos-bc, .mkTxtBox.pos-br { align-items:flex-end; }
+.mkTxtBox.pos-tl, .mkTxtBox.pos-ml, .mkTxtBox.pos-bl { justify-content:flex-start; text-align:left; }
+.mkTxtBox.pos-tc, .mkTxtBox.pos-mc, .mkTxtBox.pos-bc { justify-content:center; text-align:center; }
+.mkTxtBox.pos-tr, .mkTxtBox.pos-mr, .mkTxtBox.pos-br { justify-content:flex-end; text-align:right; }
+.mkFont { display:flex; flex-wrap:wrap; gap:6px; }
+.mkFont button { margin:0; padding:4px 10px; font-size:16px; }
+.mkFont button.on, .mkPos button.on { border-color:var(--accent); color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.mkPos { display:grid; grid-template-columns:repeat(3, 44px); grid-template-rows:repeat(3, 30px); gap:4px; padding:4px; border:1px solid var(--line); border-radius:6px; width:max-content; }
+.mkPos button { margin:0; padding:0; min-height:0; display:flex; align-items:center; justify-content:center; }
+.mkPos button i { width:10px; height:10px; border-radius:50%; background:var(--muted); }
+.mkPos button.on i { background:var(--accent); }
+.mkCols { display:flex; flex-wrap:wrap; gap:8px; }
+.mkCols .col { margin:0; }
+.mkCustom { position:relative; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+  background:conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
+.mkCustom input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; padding:0; border:0; }
+.mkCustom span { color:#fff; font-weight:700; text-shadow:0 0 2px #000; pointer-events:none; }
+/* P4 Musik und Tempo (Roger 21.11.2026) */
+.mkTempoStats { margin-top:10px; flex-wrap:wrap; }
+.mkTSeg { margin-top:4px; }
+.mkTempo { margin-top:6px; }
+.mkTBox { position:relative; height:96px; border:1px solid var(--line); border-radius:6px; background:var(--bg2, rgba(0,0,0,.03)); overflow:hidden; }
+.mkTBox svg { position:absolute; inset:0; width:100%; height:100%; }
+.mkTBox .a { fill:color-mix(in srgb, var(--accent) 35%, transparent); }
+.mkTBox .l { fill:none; stroke:var(--accent); stroke-width:1.6; vector-effect:non-scaling-stroke; }
+.mkTBox .mk { position:absolute; top:0; bottom:0; font-size:12px; color:var(--muted); padding:2px 0 0 4px; white-space:nowrap; }
+.mkTBox .mkZ { position:absolute; top:0; bottom:0; right:0; display:flex; align-items:flex-end; justify-content:center; padding:0 2px 4px; font-size:10px; line-height:1.1; text-align:center; color:var(--muted); background:repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--accent) 14%, transparent) 4px 8px); }
+.mkTBox .mk i { position:absolute; left:0; top:0; bottom:0; border-left:1.5px dashed var(--muted); }
+#cropTools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+#cropTools select { width:auto; flex:1 1 200px; margin:0; }
+#cropTools button { margin:0; flex:1 1 0; min-width:0; padding-left:6px; padding-right:6px; }  /* Roger 21.11.2026: auf ganze Breite verteilt */
+#cropStage { position:relative; margin:0 auto; overflow:hidden; background:#111; line-height:0; user-select:none; }
+#cropStage img { width:100%; display:block; }
+#cropFrame { position:absolute; left:8%; top:9%; width:84%; height:78%; box-sizing:border-box; border:2px solid #fff; box-shadow:0 0 0 9999px rgba(0,0,0,.55); cursor:move; }
+#cropFrame i { position:absolute; width:18px; height:18px; background:#fff; border:1px solid #333; box-sizing:border-box; }
+#cropFrame i[data-h="nw"] { left:-2px; top:-2px; cursor:nwse-resize; } #cropFrame i[data-h="ne"] { right:-2px; top:-2px; cursor:nesw-resize; }
+#cropFrame i[data-h="sw"] { left:-2px; bottom:-2px; cursor:nesw-resize; } #cropFrame i[data-h="se"] { right:-2px; bottom:-2px; cursor:nwse-resize; }
+#cropInfo { margin:8px 0 0; }
+#sideCrop .btnRow { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+/* P20–P23 Startseite wie Collage */
+#familyBtn.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+.famRow { display:flex; gap:10px; align-items:center; padding:8px; margin-bottom:8px; border:1px solid var(--line); border-radius:6px; color:inherit; text-decoration:none; }
+a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
+.famRow.on { border-color:var(--accent); }
+.famIcon { width:32px; height:32px; flex:none; display:grid; place-items:center; }
+.famLetter { width:32px; height:32px; display:grid; place-items:center; border-radius:6px; background:var(--accent); color:var(--on-accent); font-weight:600; }
+.famText { flex:1; min-width:0; } .famText strong { display:block; font-weight:600; overflow-wrap:anywhere; }
+.famSub { display:block; color:var(--muted); font-size:13px; } .famHere { flex:none; color:var(--muted); font-size:12px; } .famGo { color:var(--muted); font-size:18px; }
+#histSearch { width:100%; margin:0 0 10px; }
+.histList { display:grid; gap:8px; }
+.hist { display:flex; gap:10px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:5px; }
+.hist.on { border-color:var(--accent); }
+.hist img { width:64px; height:48px; object-fit:contain; border-radius:3px; background:var(--bg); flex:none; }
+.hist button.open { flex:1; min-width:0; text-align:left; border:0; background:none; padding:0; height:auto; margin:0; color:inherit; }
+.hist strong, .hist .histSub { display:block; overflow-wrap:anywhere; } .hist strong { font-weight:600; } .hist .histSub { color:var(--muted); font-size:13px; }
+.hist .danger { margin:0; }
+.mkPlayer { position:relative; line-height:0; background:#111; border-radius:4px; overflow:hidden; }
+.mkPlayer img { width:100%; display:block; }
+.mkPlay { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:56px; height:56px; margin:0; padding:0 0 0 4px; border-radius:50%;
+  font-size:22px; line-height:1; background:rgba(0,0,0,.55); color:#fff; border:2px solid #fff; }
+.mkBarRow { display:flex; gap:10px; align-items:center; margin:6px 0 10px; font-size:13px; }
+.mkTrack { flex:1; height:4px; border-radius:2px; background:var(--line); }
+.mkBtns { display:flex; flex-wrap:wrap; gap:8px; } .mkBtns button { margin:0; flex:0 0 auto; width:auto; white-space:nowrap; }
+.mkNote { font-size:13px; margin:8px 0 0; }
+.mkSub { font-size:14px; font-weight:600; margin:14px 0 6px; }
+.mkFacts { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:0 0 8px; font-size:14px; }
+.mkFacts dt { color:var(--muted); } .mkFacts dd { margin:0; overflow-wrap:anywhere; }
+.mkOk { color:var(--accent); font-weight:600; }
+@media (max-width:860px) { main > .mkP.on, #previewPane.on, #welcomePane.on { flex:none; height:auto; } }  /* in der Spalte keine feste Höhe */
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/" title="Zur Startseite" data-i18n-title="app.home"><img class="logoLight" src="/brand/icon-puzzle-light.svg" alt=""><img class="logoDark" src="/brand/icon-puzzle-dark.svg" alt=""><span class="brandText"><h1>Puzzle</h1><span class="brandTag">Photo puzzles from your Immich library</span></span></a>
+  <nav id="crumbs" class="hidden" aria-label="Pfad" data-i18n-aria-label="p.crumbs"></nav>
+  <span id="profile" data-letter="P" data-service="Puzzle"></span>
+</header>
+<main>
+  <div class="left">
+    <section class="box" id="kindBox">
+      <h2 class="boxTitle" data-i18n="p.kindHead">Was möchtest du heute erstellen?</h2>
+      <div class="btnRow"><button id="newBtn" type="button" class="primary" title="Alles auf den Anfang setzen. Das geöffnete Puzzle bleibt unter Bisherige Puzzles erhalten." data-i18n-title="p.newTitle" data-i18n="p.new">Neues Puzzle</button><button id="familyBtn" type="button" class="hidden" data-go="P21" title="Die anderen Immich-Dienste der Familie" data-i18n-title="family.openTitle" data-i18n="family.open">Etwas anderes</button></div>
+    </section>
+
+    <section class="box">
+      <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="hist.title">Bisherige Puzzles</h2><button type="button" class="paneBtn" data-go="P22" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Bisherige Puzzles rechts öffnen" data-i18n-aria-label="hist.open">&gt;</button></div>
+      <p class="muted" id="historySum"></p>
+    </section>
+
+    <section class="box mkStep" id="boxP27">
+      <h2 class="boxTitle fixed"><span class="num">1</span><span data-i18n="u.details">Puzzle Details</span> <span class="tick hidden" data-tick="name">✓</span></h2>
+      <label class="lbl" for="pzName" data-i18n="u.name">Name</label>
+      <input type="text" id="pzName" maxlength="120" autocomplete="off">
+      <p class="muted mkSum" id="saveInfo"></p>
+    </section>
+
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">2</span><span data-i18n="u.motif">Motiv</span> <span class="tick hidden" data-tick="motif">✓</span></h2><button type="button" class="paneBtn" data-go="P2" title="Panel öffnen" data-i18n-title="u.open" aria-label="Motiv" data-i18n-aria-label="u.motif">&gt;</button></div>
+      <div class="mkMotif hidden" id="motifNow"><img id="motifImg" alt=""><div><strong id="motifName"></strong><span class="muted" id="motifSrc"></span></div></div>
+      <p class="muted mkSum" id="sumP2"></p>
+    </section>
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">3</span><span data-i18n="u.crop">Motiv bearbeiten</span> <span class="tick hidden" data-tick="crop">✓</span></h2><button type="button" class="paneBtn" data-go="P19" title="Panel öffnen" data-i18n-title="u.open" aria-label="Motiv bearbeiten" data-i18n-aria-label="u.crop">&gt;</button></div>
+      <p class="muted mkSum" id="sumP19"></p>
+    </section>
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">4</span><span data-i18n="u.music">Musik</span> <span class="tick hidden" data-tick="music">✓</span></h2><button type="button" class="paneBtn" data-go="P26" title="Panel öffnen" data-i18n-title="u.open" aria-label="Musik" data-i18n-aria-label="u.music">&gt;</button></div>
+      <p class="muted mkSum" id="sumP26"></p>
+    </section>
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">5</span><span data-i18n="u.puzzle">Puzzle</span> <span class="tick hidden" data-tick="puzzle">✓</span></h2><button type="button" class="paneBtn" data-go="P3" title="Panel öffnen" data-i18n-title="u.open" aria-label="Puzzle" data-i18n-aria-label="u.puzzle">&gt;</button></div>
+      <p class="muted mkSum" id="sumP3"></p>
+    </section>
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">6</span><span data-i18n="u.tempo">Dauer und Tempo</span> <span class="tick hidden" data-tick="dur">✓</span></h2><button type="button" class="paneBtn" data-go="P4" title="Panel öffnen" data-i18n-title="u.open" aria-label="Dauer und Tempo" data-i18n-aria-label="u.tempo">&gt;</button></div>
+      <p class="muted mkSum" id="sumP4"></p>
+    </section>
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">7</span><span data-i18n="u.text">Schriftzug</span> <span class="tick hidden" data-tick="text">✓</span></h2><button type="button" class="paneBtn" data-go="P5" title="Panel öffnen" data-i18n-title="u.open" aria-label="Schriftzug" data-i18n-aria-label="u.text">&gt;</button></div>
+      <p class="muted mkSum" id="sumP5"></p>
+    </section>
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">8</span><span data-i18n="u.preview">Vorschau</span></h2><button type="button" class="paneBtn" data-go="P8" title="Panel öffnen" data-i18n-title="u.open" aria-label="Vorschau" data-i18n-aria-label="u.preview">&gt;</button></div>
+      <p class="muted mkSum" id="mkPvSum"></p>
+    </section>
+    <section class="box mkStep">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">9</span><span data-i18n="u.share">Teilen</span> <span class="tick hidden" data-tick="share">✓</span></h2><button type="button" class="paneBtn" data-go="P7" title="Panel öffnen" data-i18n-title="u.open" aria-label="Teilen" data-i18n-aria-label="u.share">&gt;</button></div>
+      <p class="muted mkSum" id="sumP7"></p>
+    </section>
+
+    <section class="box">
+      <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="sh.title">Geteilte Puzzles</h2><button type="button" class="paneBtn" data-go="P9" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Geteilte Puzzles rechts öffnen" data-i18n-aria-label="sh.open">&gt;</button></div>
+      <p class="muted" id="sharesSum"></p>
+    </section>
+    <section class="box">
+      <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="settings.title">Einstellungen</h2><button type="button" class="paneBtn" data-go="P11" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Einstellungen rechts öffnen" data-i18n-aria-label="settings.open">&gt;</button></div>
+      <p class="muted" data-i18n="settings.sum">Adresse der Live-Links</p>
+    </section>
+    <section class="box">
+      <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="about.title">Über</h2><button type="button" class="paneBtn" data-go="P12" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Über rechts öffnen" data-i18n-aria-label="about.open">&gt;</button></div>
+      <p class="muted" data-i18n="about.sum">Version dieser App und Verbindung zu Immich</p>
+    </section>
+  </div>
+
+  <!-- Willkommen (ohne Motiv) -->
+  <aside class="pane mkP" id="welcomePane" data-pno="P28">
+    <div class="hmHero"><img class="lt" src="/brand/icon-puzzle-light.svg" alt=""><img class="dk" src="/brand/icon-puzzle-dark.svg" alt=""><div><h3 data-i18n="u.welcome">Willkommen bei Puzzle</h3><p data-i18n="u.welcomeText"></p></div></div>
+    <h4 data-i18n="u.how">So funktioniert es</h4>
+    <div class="hmSteps">
+      <div class="hmStep"><span class="n">1</span><div><b data-i18n="u.s1"></b><p data-i18n="u.s1t"></p></div></div>
+      <div class="hmStep"><span class="n">2</span><div><b data-i18n="u.s2"></b><p data-i18n="u.s2t"></p></div></div>
+      <div class="hmStep"><span class="n">3</span><div><b data-i18n="u.s3"></b><p data-i18n="u.s3t"></p></div></div>
+    </div>
+    <h4 data-i18n="u.glance">Auf einen Blick</h4>
+    <div class="hmTiles">
+      <button type="button" class="hmTile" data-go="P22"><span class="v" id="hmTPz">0</span><span class="l" data-i18n="u.tPuzzles">Puzzles</span></button>
+      <button type="button" class="hmTile" data-go="P9"><span class="v" id="hmTLinks">0</span><span class="l" data-i18n="u.tLinks">aktive Links</span></button>
+      <button type="button" class="hmTile" data-go="P9"><span class="v" id="hmTViews">0</span><span class="l" data-i18n="u.tViews">Aufrufe</span></button>
+      <button type="button" class="hmTile" data-go="P26"><span class="v" id="hmTMusic">0</span><span class="l" data-i18n="u.tMusic">eigene Musik</span></button>
+    </div>
+    <h4 data-i18n="u.recent">Zuletzt</h4>
+    <ul class="hmLog" id="hmLog"></ul>
+    <p class="hmFoot muted"><span id="hmVer"></span> · <a href="#" data-go="P13" data-i18n="u.whatsNew">Was ist neu?</a></p>
+  </aside>
+
+  <!-- P2 Motiv -->
+  <aside class="pane mkP" id="sideMotif" data-pno="P2">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">2</span><span data-i18n="u.motifPick">Motiv auswählen</span> <span class="tick hidden" data-tick="motif">✓</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody" id="motifBody">
+      <div class="btnRow mkEven mkSrc"><button type="button" id="uploadBtn" data-i18n="u.upload">Hochladen</button><button type="button" class="primary" id="imBtn" data-go="P24" data-i18n="u.fromImmich">Aus Immich</button></div>
+      <input type="file" id="file" accept="image/*" class="hidden">
+      <p class="muted mkNote" id="mkNote" data-i18n="u.motifNote"></p>
+      <div id="mkDirect">
+      <h3 class="paneSection" data-i18n="u.direct">Direkt eingeben</h3>
+      <label class="lbl" for="mkMotifRef" data-i18n="u.refLbl">Link zum Foto oder Immich-ID</label>
+      <div class="mkInRow"><input type="text" id="mkMotifRef" placeholder="" data-i18n-placeholder="u.refPh" autocomplete="off"><button type="button" id="mkRefApply" data-i18n="u.apply">Übernehmen</button></div>
+      </div>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P24 Fotos aus Immich -->
+  <aside class="pane mkP" id="sideImmich" data-pno="P24">
+    <div class="paneHead"><h2 data-i18n="u.immich">Fotos aus Immich</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkTabs" id="imTabs"><button type="button" class="mkTab on" data-tab="alb"></button><button type="button" class="mkTab" data-tab="per"></button><button type="button" class="mkTab" data-tab="shr"></button></div>
+    <input type="search" class="mkFind" id="imFind" placeholder="Nach Namen suchen" data-i18n-placeholder="u.findPh" aria-label="Nach Namen suchen" data-i18n-aria-label="u.findPh">
+    <table class="mkAlb"><thead><tr><th data-sort="name"></th><th class="n" data-sort="count"></th><th data-sort="date"></th><th></th></tr></thead><tbody id="imBody"></tbody></table>
+    <p class="muted hidden" id="imInfo"></p>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P25 Inhalt eines Albums -->
+  <aside class="pane mkP" id="sideAlbum" data-pno="P25">
+    <div class="paneHead"><h2 id="albTitle"></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <p class="muted" id="albInfo" style="margin:0 0 8px"></p>
+    <div class="mkGrid" id="albGrid"></div>
+    <div class="btnRow doneRow"><button type="button" data-go="CLOSE" data-i18n="u.cancel">Abbrechen</button><button type="button" class="primary" id="albUse" disabled data-i18n="u.useMotif">Als Motiv übernehmen</button></div>
+  </aside>
+
+  <!-- P19 Motiv bearbeiten -->
+  <aside class="pane mkP" id="sideCrop" data-pno="P19">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">3</span><span data-i18n="u.crop">Motiv bearbeiten</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody" id="cropBody">
+      <label class="lbl" data-i18n="u.format">Format</label>
+      <div class="mkFmt" id="cropFmt" role="radiogroup" aria-label="Format" data-i18n-aria-label="u.format"></div>
+      <p class="muted mkNote" data-i18n="u.cropNote"></p>
+      <div id="cropTools"><button type="button" id="cropRotL" data-i18n="u.rotL" data-i18n-title="u.rotLT">Links drehen</button><button type="button" id="cropRotR" data-i18n="u.rotR" data-i18n-title="u.rotRT">Rechts drehen</button><button type="button" id="cropWhole" data-i18n="u.whole" data-i18n-title="u.wholeT">Ganzes Bild</button></div>
+      <div id="cropStage"><img id="cropImg" alt="" draggable="false"><div id="cropFrame" tabindex="0" role="group" aria-label="Ausschnitt" data-i18n-aria-label="u.cropAria"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div>
+      <div class="mkZoom"><span class="muted" data-i18n="u.zoom">Zoom</span><input type="range" id="cropZoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom" data-i18n-aria-label="u.zoom"></div>
+      <p id="cropInfo" class="muted"></p>
+    </div>
+    <div class="btnRow doneRow"><button type="button" data-go="CLOSE" data-i18n="u.cancel">Abbrechen</button><button type="button" class="primary" id="cropOk" data-i18n="u.apply">Übernehmen</button></div>
+  </aside>
+
+  <!-- P26 Musik -->
+  <aside class="pane mkP" id="sideMusic" data-pno="P26">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">4</span><span data-i18n="u.music">Musik</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody">
+      <input type="search" id="trackSearch" placeholder="Musik suchen" data-i18n-placeholder="p.musicSearch" style="margin-bottom:6px">
+      <div id="tracks"></div>
+      <label class="drop" for="musicFile" style="padding:8px;margin-top:2px"><span><strong style="font-size:14px" data-i18n="p.ownMusic">Eigene Musik hochladen</strong></span><span data-i18n="u.ownMusicHint"></span></label>
+      <input type="file" id="musicFile" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" class="hidden">
+      <div id="musicOpts">
+        <label class="lbl" for="vol" data-i18n="p.volume">Lautstärke</label>
+        <input type="range" id="vol" min="0" max="100" value="80">
+        <label class="swRow"><span data-i18n="p.fade">Ausblenden am Ende</span><input type="checkbox" class="sw" role="switch" id="fade" checked></label>
+      </div>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P3 Puzzle -->
+  <aside class="pane mkP" id="sidePieces" data-pno="P3">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">5</span><span data-i18n="u.puzzle">Puzzle</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody">
+      <label class="lbl" data-i18n="p.count">Anzahl Teile</label>
+      <div class="counts" id="counts"></div>
+      <div class="muted" id="gridInfo" style="margin-top:4px"></div>
+      <label class="lbl" data-i18n="p.startLbl">Teile am Anfang</label>
+      <div class="startPick" id="startPick"><button type="button" data-s="scatter" class="on"><svg viewBox="0 0 56 34" aria-hidden="true"><rect x="16" y="8" width="24" height="18" fill="none" stroke="currentColor" stroke-dasharray="2 2" opacity=".5"/><g fill="currentColor" opacity=".8"><rect x="3" y="4" width="6" height="6" transform="rotate(20 6 7)"/><rect x="45" y="5" width="6" height="6" transform="rotate(-15 48 8)"/><rect x="4" y="22" width="6" height="6" transform="rotate(40 7 25)"/><rect x="46" y="23" width="6" height="6"/><rect x="25" y="28" width="5" height="5" transform="rotate(30 27 30)"/><rect x="24" y="0" width="5" height="5"/></g></svg><span data-i18n="p.start.scatter">Verstreut</span></button>
+<button type="button" data-s="heap"><svg viewBox="0 0 56 34" aria-hidden="true"><rect x="22" y="8" width="24" height="18" fill="none" stroke="currentColor" stroke-dasharray="2 2" opacity=".5"/><g fill="currentColor" opacity=".8"><rect x="4" y="16" width="6" height="6" transform="rotate(20 7 19)"/><rect x="8" y="12" width="6" height="6" transform="rotate(-25 11 15)"/><rect x="6" y="21" width="6" height="6" transform="rotate(10 9 24)"/><rect x="11" y="18" width="6" height="6" transform="rotate(45 14 21)"/><rect x="2" y="12" width="6" height="6"/></g></svg><span data-i18n="p.start.heap">Haufen</span></button>
+<button type="button" data-s="mix"><svg viewBox="0 0 56 34" aria-hidden="true"><rect x="22" y="8" width="24" height="18" fill="none" stroke="currentColor" stroke-dasharray="2 2" opacity=".5"/><g fill="currentColor" opacity=".8"><rect x="4" y="16" width="6" height="6" transform="rotate(20 7 19)"/><rect x="8" y="12" width="6" height="6" transform="rotate(-25 11 15)"/><rect x="6" y="21" width="6" height="6"/><rect x="48" y="4" width="5" height="5" transform="rotate(30 50 6)"/><rect x="47" y="25" width="5" height="5"/><rect x="30" y="28" width="5" height="5" transform="rotate(-20 32 30)"/></g></svg><span data-i18n="p.start.mix">Gemischt</span></button></div>
+      <label class="swRow"><span data-i18n="p.rot">Teile am Anfang verdreht</span><input type="checkbox" class="sw" role="switch" id="optRot"></label>
+      <label class="swRow"><span data-i18n="p.frame">Zuerst den Rahmen</span><input type="checkbox" class="sw" role="switch" id="optFrame" checked></label>
+      <label class="swRow"><span data-i18n="p.ghost">Vorlage blass auf dem Tisch</span><input type="checkbox" class="sw" role="switch" id="optGhost"></label>
+      <div class="btnRow"><button id="reshuffle" type="button" data-i18n="p.reshuffle">Neu mischen</button></div>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P4 Dauer und Tempo -->
+  <aside class="pane mkP" id="sideTempo" data-pno="P4">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">6</span><span data-i18n="u.tempo">Dauer und Tempo</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody">
+      <button type="button" class="mkRow mkMusicSel" data-go="P26"><span id="tmMusic"></span><span class="muted" id="tmMusicLen"></span><b aria-hidden="true">›</b></button>
+      <label class="lbl"><span data-i18n="p.duration">Dauer</span> <span class="muted" data-i18n="p.durationMax">(höchstens 1 Minute)</span></label>
+      <div class="tabs sm" role="tablist" id="durTabs">
+        <button role="tab" aria-selected="false" data-d="music" data-i18n="p.dur.music">Wie die Musik</button>
+        <button role="tab" aria-selected="true" data-d="own" data-i18n="p.dur.own">Eigene Dauer</button>
+      </div>
+      <div id="musicCut" class="muted hidden" style="margin-top:-4px" data-i18n="p.musicCut"></div>
+      <div id="ownDur">
+        <label class="lbl" for="durSec" style="margin-top:0" data-i18n="p.seconds">Sekunden (10 bis 60)</label>
+        <input type="range" id="durSec" min="10" max="60" value="45">
+        <div class="rangeLbl"><span>10 s</span><span id="durVal">45 s</span><span>60 s</span></div>
+      </div>
+      <label class="lbl" for="hold"><span data-i18n="u.holdLbl"></span> <b id="mkHoldV">5 s</b></label>
+      <input type="range" id="hold" min="2" max="10" value="5">
+      <label class="lbl" for="tempo" data-i18n="u.tempoLbl">Tempo-Bogen</label>
+      <input type="range" id="tempo" min="0" max="200" value="50">
+      <div class="rangeLbl"><span data-i18n="u.even"></span><span data-i18n="u.strong"></span><span data-i18n="u.vstrong"></span></div>
+      <div id="mkFrameOnly">  <!-- nur mit «Zuerst den Rahmen», sonst ohne Wirkung (Roger 21.11.2026, 0.1.4) -->
+      <label class="lbl" for="mkRahmen"><span data-i18n="u.frameAt"></span> <b id="mkRahmenV">40 %</b></label>
+      <input type="range" id="mkRahmen" min="15" max="70" value="40">
+      <div class="rangeLbl"><span data-i18n="u.early"></span><span data-i18n="u.late"></span></div>
+      </div>
+      <label class="lbl" for="mkRamp"><span data-i18n="u.ramp"></span> <b id="mkRampV">5 %</b></label>
+      <input type="range" id="mkRamp" min="0" max="60" value="5">
+      <div class="rangeLbl"><span data-i18n="u.rampNow"></span><span data-i18n="u.later"></span></div>
+      <p class="muted mkNote" id="mkFrameNote" data-i18n="u.frameNote"></p>
+      <div class="stats mkTempoStats" id="mkTStats"></div>
+      <div class="stats mkTempoStats mkTSeg" id="mkTSeg"></div>
+      <div class="chartWrap mkTempo"><div class="cap"><span data-i18n="u.tChart"></span></div>
+        <div class="mkTBox"><svg id="mkTSvg" viewBox="0 0 450 100" preserveAspectRatio="none" aria-hidden="true"><path id="mkTArea" class="a"/><path id="mkTLine" class="l"/></svg>
+          <span class="mk mkTR" id="mkTRm"><i></i><span data-i18n="u.mFrame">Rahmen</span></span><span class="mkZ" id="mkTZ" data-i18n-html="u.mBig"></span><span class="mk" id="mkTFm"><i></i><span data-i18n="u.mDone">fertig</span></span></div>
+      </div>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P5 Schriftzug -->
+  <aside class="pane mkP" id="sideText" data-pno="P5">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">7</span><span data-i18n="u.text">Schriftzug</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody">
+      <label class="lbl" for="txt" data-i18n="p.textLbl">Text auf dem Motiv (mehrzeilig, optional)</label>
+      <textarea id="txt" rows="2" maxlength="300"></textarea>
+      <label class="lbl" data-i18n="p.textWhen">Wann sichtbar</label>
+      <div class="tabs sm" role="tablist" id="txtMode">
+        <button role="tab" aria-selected="true" data-m="in" data-i18n="p.textMode.in">Im Puzzle</button>
+        <button role="tab" aria-selected="false" data-m="end" data-i18n="p.textMode.end">Erscheint am Schluss</button>
+      </div>
+      <label class="lbl" data-i18n="u.textPrev">Vorschau</label>
+      <div class="mkTxtPrev" id="mkTxtPrev"><img id="mkTxtImg" alt=""><div class="mkTxtBox pos-mc" id="mkTxtBox"><span id="mkTxtOut"></span></div></div>
+      <label class="lbl" data-i18n="u.fonts">Schriftarten</label>
+      <div class="mkFont" id="fontSys" role="radiogroup" aria-label="Schriftarten" data-i18n-aria-label="u.fonts"></div>
+      <label class="lbl" data-i18n="u.moreFonts">Weitere Schriftarten</label>
+      <div class="mkFont" id="fontCol" role="radiogroup" aria-label="Weitere Schriftarten" data-i18n-aria-label="u.moreFonts"></div>
+      <p class="muted mkNote" data-i18n="u.fontNote"></p>
+      <label class="lbl" for="mkSize"><span data-i18n="u.size">Schriftgrösse</span> <b id="mkSizeV">100 %</b></label>
+      <input type="range" id="mkSize" min="50" max="200" step="5" value="100">
+      <div class="rangeLbl"><span data-i18n="u.small"></span><span data-i18n="u.normal"></span><span data-i18n="u.big"></span></div>
+      <label class="lbl" data-i18n="u.pos">Position</label>
+      <div class="mkPos" id="mkPos" role="radiogroup" aria-label="Position" data-i18n-aria-label="u.pos"></div>
+      <label class="lbl" data-i18n="u.color">Farbe</label>
+      <div class="mkCols" id="txtCol"><label class="col mkCustom" title="Eigene Farbe" data-i18n-title="u.ownColor"><input type="color" id="mkColPick" value="#ffffff" aria-label="Eigene Farbe" data-i18n-aria-label="u.ownColor"><span>+</span></label></div>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P8 Vorschau -->
+  <aside class="pane mkP" id="previewPane" data-pno="P8">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">8</span><span data-i18n="u.preview">Vorschau</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkProg" id="mkProg"><span class="muted" id="mkProgN"></span><ol id="mkProgList"></ol></div>
+    <div class="mkPvTitle"><span class="tab"><i></i><b id="mkPvTitle"></b></span><span class="muted" id="mkPvSrc"></span></div>
+    <div class="tableWrap" id="pWrap"><canvas id="pCanvas"></canvas><div class="empty" id="pEmpty" data-i18n="p.previewEmpty">Zuerst links ein Motiv wählen.</div></div>
+    <div class="player">
+      <button class="pp" id="pPlay" type="button" title="Abspielen" data-i18n-title="p.play">▶</button>
+      <input type="range" id="pScrub" min="0" max="1000" value="0" aria-label="Zeit" data-i18n-aria-label="p.time">
+      <span class="time" id="pTime">0:00 / 0:00</span>
+      <select id="pSpeed" title="Vorschau-Tempo" data-i18n-title="p.speed"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option><option value="5">5×</option></select>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="chartWrap">
+      <div class="cap"><span data-i18n="p.chart">Tempo: eingesetzte Teile pro Sekunde</span></div>
+      <canvas id="chart"></canvas>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P7 Teilen -->
+  <aside class="pane mkP" id="sideShareNow" data-pno="P7">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">9</span><span data-i18n="u.share">Teilen</span> <span class="tick hidden" data-tick="share">✓</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody">
+      <p class="muted" id="shareNeed" style="margin:0" data-i18n="p.needMotif"></p>
+      <div id="shareBefore" class="hidden">
+        <p class="muted" style="margin:0 0 6px" data-i18n="p.shareIntro">Der Empfänger sieht das Puzzle im Browser, mit Musik, ohne Anmeldung.</p>
+        <div class="btnRow"><button id="mkLink" type="button" class="primary" data-i18n="p.mkLink">Link erstellen</button></div>
+      </div>
+      <p class="muted hidden" id="shareOff" style="margin:0" data-i18n="p.shareOff">Live-Links sind nicht eingerichtet (SHARE_PORT fehlt).</p>
+      <div id="shareAfter" class="hidden">
+        <label class="lbl" for="mkWebTitle" style="margin-top:0" data-i18n="u.webTitle">Website-Titel</label>
+        <input type="text" id="mkWebTitle" maxlength="120" autocomplete="off">
+        <p class="muted mkNote" data-i18n="u.webTitleNote"></p>
+        <div class="linkRow"><code id="linkTxt"></code><button class="cpy" type="button" title="Link kopieren" data-i18n-title="p.copy" aria-label="Link kopieren" data-i18n-aria-label="p.copy" id="cpy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
+        <p class="muted" id="linkState" style="margin:0"></p>
+        <label class="swRow"><span data-i18n="p.active">Aktiv</span><input type="checkbox" class="sw" role="switch" id="lkActive"></label>
+        <label class="swRow"><span data-i18n="p.password">Passwort</span><input type="checkbox" class="sw" role="switch" id="lkPw"></label>
+        <div id="pwRow" class="hidden"><input type="password" id="pwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="pwSet" data-i18n="p.pwSet">Setzen</button></div>
+        <label class="swRow"><span data-i18n="p.download">Download erlauben (Foto)</span><input type="checkbox" class="sw" role="switch" id="lkDl"></label>
+        <label class="swRow"><span data-i18n="p.metadata">Metadaten zeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="lkMeta"></label>
+        <label class="lbl" for="lkDays" data-i18n="p.valid">Gültig</label>
+        <select id="lkDays"><option value="7" data-i18n="p.days7">7 Tage</option><option value="30" data-i18n="p.days30">30 Tage</option><option value="90" data-i18n="p.days90">90 Tage</option><option value="365" data-i18n="p.days365">1 Jahr</option><option value="0" data-i18n="p.days0">Unbegrenzt</option><option value="until" hidden data-i18n="p.daysUntil">Bis Datum</option></select>
+        <div class="btnRow"><button id="waBtn" type="button" data-i18n="p.whatsapp">Per WhatsApp senden</button><button id="rmLink" type="button" class="danger" data-i18n="p.rmLink">Link löschen</button></div>
+        <div class="ogCard"><img id="ogImg" alt=""><div><strong id="ogTitle"></strong><span class="muted" id="ogText"></span><br><span class="muted" id="ogHost"></span></div></div>
+      </div>
+      <div class="btnRow hidden" id="delRow"><button id="delBtn" type="button" class="danger" data-i18n="p.delete">Puzzle löschen</button></div>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P22 Bisherige Puzzles -->
+  <aside class="pane mkP" id="sideHistory" data-pno="P22">
+    <div class="paneHead"><h2 data-i18n="hist.title">Bisherige Puzzles</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <input type="search" id="histSearch" placeholder="Nach Namen suchen" data-i18n-placeholder="hist.search" aria-label="Puzzles nach Namen suchen" data-i18n-aria-label="hist.searchLabel">
+    <div class="histList" id="plist"></div>
+    <p class="muted hidden" id="plistEmpty" style="margin:0" data-i18n="hist.empty"></p>
+    <p class="muted hidden" id="histNone" style="margin:0" data-i18n="hist.noMatch">Kein Puzzle mit diesem Namen.</p>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P23 Ein Puzzle -->
+  <aside class="pane mkP" id="sidePuzzle" data-pno="P23">
+    <div class="paneHead"><h2 id="pzTitle"></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <canvas id="pzCanvas" aria-label="Vorschau des Puzzles" data-i18n-aria-label="pz.preview"></canvas>
+    <div class="player">
+      <button class="pp" id="pzPlay" type="button" title="Abspielen" data-i18n-title="p.play">▶</button>
+      <input type="range" id="pzScrub" min="0" max="1000" value="0" aria-label="Zeit" data-i18n-aria-label="p.time">
+      <span class="time" id="pzTime">0:00 / 0:00</span>
+    </div>
+    <div class="btnRow mkBtns"><button type="button" class="primary" id="pzEdit" data-i18n="pz.edit">Bearbeiten</button><button type="button" id="pzReuse" data-i18n="pz.reuse">Nur Einstellungen übernehmen</button><button type="button" id="pzDel" class="danger" data-i18n="u.delete">Löschen</button></div>
+    <p class="muted mkNote" id="pzHint" data-i18n="u.pzHint"></p>
+    <h3 class="mkSub" data-i18n="u.madeFrom">Erstellt aus</h3>
+    <dl class="mkFacts" id="pzFacts"></dl>
+    <div id="pzLinkBox">
+      <h3 class="mkSub" data-i18n="u.link">Link</h3>
+      <div class="linkRow"><code id="pzUrl"></code><button class="cpy" type="button" id="pzUrlCopy" title="Link kopieren" data-i18n-title="p.copy" aria-label="Link kopieren" data-i18n-aria-label="p.copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
+      <button type="button" class="mkRow" id="pzToShares"><span data-i18n="sh.title">Geteilte Puzzles</span><span class="muted" data-i18n="u.manageLink">Link verwalten</span><b aria-hidden="true">›</b></button>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P21 Etwas anderes -->
+  <aside class="pane mkP" id="sideFamily" data-pno="P21">
+    <div class="paneHead"><h2 data-i18n="family.title">Etwas anderes</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <p class="muted" style="margin:0 0 10px" data-i18n="family.intro">Die anderen Immich-Dienste. Ein Klick öffnet dort ein neues Projekt.</p>
+    <div id="familyList"></div>
+    <p id="familyNone" class="muted hidden" data-i18n="family.none">Keine anderen Immich-Dienste eingerichtet. Wie das geht, steht im README unter «Family».</p>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P9 Geteilte Puzzles -->
+  <aside class="pane mkP" id="sideMain" data-pno="P9">
+    <div class="paneHead"><h2 data-i18n="sh.title">Geteilte Puzzles</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div id="shareTools">
+      <span id="shareFilter" role="group" aria-label="Live-Links filtern" data-i18n-aria-label="sh.filter"><button type="button" data-filter="active">Aktiv</button><button type="button" data-filter="expired">Abgelaufen</button><button type="button" data-filter="all" class="on">Alle</button></span>
+      <button type="button" id="sharesPurge" class="hidden" data-i18n="sh.purge">Abgelaufene löschen</button>
+    </div>
+    <div id="shareList"></div>
+    <p class="muted" style="margin:8px 0 0" data-i18n="sh.counted">Gezählt wird, wer die Seite öffnet.</p>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P10 Details eines Links -->
+  <aside class="pane mkP" id="sideShare" data-pno="P10">
+    <div class="paneHead"><h2 id="shDetailTitle"></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <img id="shDetailThumb" alt="">
+    <label class="lbl" for="shWebTitle" data-i18n="u.webTitle">Website-Titel</label>
+    <input type="text" id="shWebTitle" maxlength="120" autocomplete="off">
+    <p class="muted mkNote" style="margin-top:4px" data-i18n="u.shWebTitleNote"></p>
+    <div class="linkRow"><code id="shUrl"></code><button class="cpy" type="button" id="shCopy" title="Link kopieren" data-i18n-title="p.copy" aria-label="Link kopieren" data-i18n-aria-label="p.copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
+    <div id="shFacts"></div>
+    <label class="swRow"><span data-i18n="p.active">Aktiv</span><input type="checkbox" class="sw" role="switch" id="shActive"></label>
+    <label class="swRow"><span data-i18n="p.password">Passwort</span><input type="checkbox" class="sw" role="switch" id="shPw"></label>
+    <div id="shPwRow" class="hidden"><input type="password" id="shPwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="shPwSet" data-i18n="p.pwSet">Setzen</button></div>
+    <label class="swRow"><span data-i18n="p.download">Download erlauben (Foto)</span><input type="checkbox" class="sw" role="switch" id="shDl"></label>
+    <label class="swRow"><span data-i18n="p.metadata">Metadaten zeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="shMeta"></label>
+    <label class="lbl" for="shDays" data-i18n="sh.valid">Gültigkeit ab heute</label>
+    <select id="shDays"></select>
+    <input type="date" id="shUntil" class="hidden" aria-label="Gültig bis" data-i18n-aria-label="sh.untilLabel">
+    <div class="btnRow"><button type="button" id="shOpen" data-i18n="sh.openLink">Öffnen</button><button type="button" id="shEdit" data-i18n="sh.editPuzzle">Puzzle bearbeiten</button></div>
+    <div class="btnRow"><button type="button" id="shDel" class="danger" data-i18n="p.rmLink">Link löschen</button></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P11 Einstellungen, P12 Über, P13 Changelog -->
+  <aside class="pane mkP" id="sideSettings" data-pno="P11">
+    <div class="paneHead"><h2 data-i18n="settings.title">Einstellungen</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div id="settingsBody"></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+  <aside class="pane mkP" id="sideAbout" data-pno="P12">
+    <div class="paneHead"><h2 data-i18n="about.title">Über</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div id="aboutBody"></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+  <aside class="pane mkP" id="sideChangelog" data-pno="P13">
+    <div class="paneHead"><h2 data-i18n="about.changelog">Changelog</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div id="changelogBody"></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+</main>
+<div id="toast" role="status"></div>
+<audio id="audio" preload="none"></audio>
+
+{{I18N}}<script src="/common.js?v={{VERSION}}"></script>
+<script src="/profile.js?v={{VERSION}}"></script>
+<script src="/puzzle-engine.js?v={{VERSION}}"></script>
+<script>
+"use strict";
+// Panel-Oberfläche nach dem Mockup docs/design/mockups/puzzle/puzzle-panels.html (Roger 21.11.2026):
+// links die Startspalte mit den Schritten 1–9, rechts daneben die offenen Panels (P2 … P28)
+async function api(method, url, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
+  const res = await fetch(url, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(srvText(data, "error") || `HTTP ${res.status}`);
+  return data;
+}
+function toast(text, bad) {
+  const e = $("toast"); e.textContent = text; e.classList.toggle("bad", !!bad); e.classList.add("on");
+  clearTimeout(toast.h); toast.h = setTimeout(() => e.classList.remove("on"), bad ? 5000 : 2600);
+}
+const fail = e => toast(e.message || String(e), true);
+function setTabs(box, attr, val) { box.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset[attr] === val))); }
+const loadImage = src => new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error(t("p.imgFailed"))); i.src = src; });
+// Schlüssel mit Teil aus Daten, z. B. u.c.<farbe>
+const tp = (prefix, key, vars) => t(prefix + key, vars);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+// ---------- Zustand ----------
+const st = { id: null, img: null, base: null, asset: null, motifName: "", motifSrc: "", photoDirty: false, photoGen: 0, dirty: false, rev: 0,
+             crop: null, cropDone: false, visited: {}, count: 100, start: "scatter", seed: 4711, durMode: "own", textMode: "in", textColor: "#ffffff",
+             textFont: "hand", textPos: "mc", music: null, tracks: [], puzzles: [], share: { enabled: false }, link: null, sources: null };
+const P = new Puzzle($("pCanvas"));
+let playing = false, last = 0;
+const audio = $("audio");
+const START_KEYS = { scatter: "p.start.scatter", heap: "p.start.heap", mix: "p.start.mix" };
+const FORMATS = ["photo", "free", "1:1", "4:3", "3:2", "16:9", "3:4", "2:3", "9:16"];
+const fmtLabel = f => f === "photo" || f === "free" ? tp("u.fmt.", f) : (f || "").replace(":", " : ");
+const ratio = f => { const m = /^(\d+):(\d+)$/.exec(f || ""); return m ? +m[1] / +m[2] : 0; };
+
+// ---------- Speichern: automatisch, kurz nach jeder Änderung ----------
+let saving = null, saveTimer = null;
+function touch() {
+  st.dirty = true; st.rev++; drawState();
+  clearTimeout(saveTimer); saveTimer = setTimeout(() => save().catch(fail), 800);
+}
+async function save() {
+  clearTimeout(saveTimer);
+  while (saving) await saving.catch(() => {});
+  if (!st.img || !st.dirty) return;
+  saving = doSave(); drawState();
+  try { await saving; } finally { saving = null; drawState(); }
+}
+async function doSave() {
+  const rev = st.rev, gen = st.photoGen;
+  const body = { name: $("pzName").value.trim() || st.motifName || t("u.noName"), config: config(), asset: st.asset };
+  if (st.photoDirty || !st.id) body.photo = baseCanvas().toDataURL("image/jpeg", .92);
+  const p = await api("POST", st.id ? `/api/puzzles/${st.id}` : "/api/puzzles", body);
+  st.id = p.id; st.link = p.link;
+  if (st.photoGen === gen) st.photoDirty = false;
+  if (st.rev === rev) st.dirty = false;
+  history.replaceState(null, "", "/?id=" + p.id);
+  await loadPuzzles(); drawInfo(); drawLink();
+}
+window.addEventListener("beforeunload", e => { if (st.dirty && st.img) { save().catch(() => {}); e.preventDefault(); e.returnValue = ""; } });
+document.addEventListener("visibilitychange", () => { if (document.hidden && st.dirty) save().catch(() => {}); });
+function drawState() {
+  $("saveInfo").textContent = !st.img ? t("p.needMotif") : saving || st.dirty ? t("u.saving") : st.id ? t("u.savedAuto") : "";
+  $("delRow").classList.toggle("hidden", !st.id);
+  $("shareNeed").classList.toggle("hidden", !!st.img || !!st.link);
+  $("shareOff").classList.toggle("hidden", st.share.enabled || !!st.link);
+  $("shareBefore").classList.toggle("hidden", !st.share.enabled || !!st.link || !st.img);
+  $("shareAfter").classList.toggle("hidden", !st.link);
+  drawSteps();
+}
+
+// ---------- Einstellungen ----------
+function duration() {
+  const d = st.music && st.music.duration;
+  if (st.durMode === "music" && d) return clamp(Math.round(d * 10) / 10, 10, PUZZLE_MAXT);
+  return clamp(+$("durSec").value || 45, 10, PUZZLE_MAXT);
+}
+function config() {
+  return { count: st.count, format: st.crop ? st.crop.fmt : "photo", seed: st.seed, start: st.start, rot: $("optRot").checked,
+           frame: $("optFrame").checked, ghost: $("optGhost").checked, T: duration(), durMode: st.durMode,
+           hold: +$("hold").value, tempo: +$("tempo").value / 100, frameAt: +$("mkRahmen").value, ramp: +$("mkRamp").value,
+           textSize: +$("mkSize").value, title: $("pzName").value.trim(), text: $("txt").value,
+           textMode: st.textMode, textFont: st.textFont, textPos: st.textPos, textColor: st.textColor,
+           music: st.music ? { id: st.music.id, name: st.music.name, volume: +$("vol").value / 100, fade: $("fade").checked } : null };
+}
+function applyConfig(c) {
+  st.count = c.count; st.start = c.start; st.seed = c.seed; st.durMode = c.durMode; st.textMode = c.textMode || "in"; st.textColor = c.textColor || "#ffffff";
+  st.textFont = FONTS[c.textFont] ? c.textFont : "hand"; st.textPos = textPos(c.textPos);
+  st.crop = newCrop(c.format || "photo");
+  $("optRot").checked = !!c.rot; $("optFrame").checked = c.frame !== false; syncFrameOnly(); $("optGhost").checked = !!c.ghost;
+  $("durSec").value = c.durMode === "own" ? Math.round(c.T) : 45;
+  $("hold").value = String(clamp(Math.round(c.hold ?? 5), 2, 10)); $("tempo").value = Math.round((c.tempo ?? .5) * 100);
+  $("mkRahmen").value = c.frameAt ?? 40; $("mkRamp").value = c.ramp ?? 5; $("mkSize").value = c.textSize ?? 100;
+  $("pzName").value = c.title || ""; $("txt").value = c.text || "";
+  st.music = c.music ? (st.tracks.find(x => x.id === c.music.id) || { id: c.music.id, name: c.music.name, duration: c.durMode === "music" ? c.T : null, missing: true }) : null;
+  $("vol").value = Math.round((c.music ? c.music.volume : .8) * 100); $("fade").checked = c.music ? c.music.fade : true;
+  if (CFONTS[st.textFont]) loadFont(st.textFont).then(() => rebuild(true));
+  drawControls();
+}
+function drawControls() {
+  $("counts").querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.textContent === st.count));
+  $("startPick").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.s === st.start));
+  setTabs($("durTabs"), "d", st.durMode); $("ownDur").classList.toggle("hidden", st.durMode !== "own");
+  setTabs($("txtMode"), "m", st.textMode);
+  $("durVal").textContent = $("durSec").value + " s";
+  $("mkHoldV").textContent = $("hold").value + " s";
+  $("mkRahmenV").textContent = $("mkRahmen").value + " %";
+  $("mkRampV").textContent = $("mkRamp").value + " %";
+  $("mkSizeV").textContent = $("mkSize").value + " %";
+  $("musicOpts").classList.toggle("hidden", !st.music);
+  $("musicCut").classList.toggle("hidden", !(st.durMode === "music" && st.music && st.music.duration > PUZZLE_MAXT));
+  $("tmMusic").textContent = st.music ? st.music.name : t("u.noMusic");
+  $("tmMusicLen").textContent = st.music && st.music.duration ? fmtT(st.music.duration) : "";
+  drawTracks(); drawTextPanel(); drawSteps();
+}
+
+// ---------- Vorschau ----------
+function baseCanvas() { if (!st.base) st.base = baseFromCrop(st.crop); return st.base; }
+function rebuild(keepT) {
+  if (!st.img) { $("pEmpty").classList.remove("hidden"); drawSteps(); return; }
+  $("pEmpty").classList.add("hidden");
+  const c = puzzleConfig(config(), baseCanvas()), t0 = keepT ? P.t : 0;
+  P.setup(c); P.t = Math.min(t0, c.T); P.draw(P.t);
+  drawInfo(); drawChart(); syncPlayer(); drawSteps();
+  if (shown.includes("P4")) drawTempo();
+}
+function drawInfo() {
+  const c = P.cfg; if (!c) return;
+  const n = c.cols * c.rows, e = P.pieces.filter(p => p.edge).length;
+  $("gridInfo").textContent = t("p.gridInfo", { n, cols: c.cols, rows: c.rows, edge: e });
+  $("stats").replaceChildren(...[[t("p.stat.dur"), fmtT(c.T)], [t("p.stat.done"), fmtT(P.done)],
+    ...(P.frameDone ? [[t("p.stat.frame"), fmtT(P.frameDone)]] : []), [t("p.stat.par"), String(P.maxPar)]].map(([k, v]) => {
+    const s = el("span"), b = el("b", "", v); s.append(k + " ", b); return s; }));
+  const title = webTitle();
+  $("ogTitle").textContent = title;
+  $("ogText").textContent = t("p.ogText", { n, time: fmtT(c.T) }) + (st.music ? " · " + t("p.withMusic") : "");
+  const card = st.id ? `/api/puzzles/${st.id}/card.jpg?v=${Math.floor(Date.now() / 60000)}` : "";
+  if (card) { if ($("ogImg").getAttribute("src") !== card) $("ogImg").src = card; } else $("ogImg").removeAttribute("src");
+  drawPvTitle();
+}
+function drawChart() {
+  const cv = $("chart"), dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  if (!P.cfg || !w) return;
+  const T = P.cfg.T, n = Math.max(60, Math.floor(w / 2)), win = Math.max(1, T / 25), vals = [];
+  for (let i = 0; i <= n; i++) { const tt = T * i / n; let k = 0; for (const p of P.order) { const d = Math.abs(p.e - tt); if (d < win) k += 1 - d / win; } vals.push(k / win); }
+  const css = getComputedStyle(document.documentElement), acc = css.getPropertyValue("--accent").trim(), muted = css.getPropertyValue("--muted").trim();
+  const mx = Math.max(1, ...vals);
+  g.beginPath(); g.moveTo(0, h); vals.forEach((v, i) => g.lineTo(i / n * w, h - 4 - (v / mx) * (h - 10))); g.lineTo(w, h); g.closePath();
+  g.fillStyle = acc; g.globalAlpha = .35; g.fill(); g.globalAlpha = 1; g.strokeStyle = acc; g.lineWidth = 1.5; g.stroke();
+  const mark = (tt, l) => { const x = tt / T * w; g.strokeStyle = muted; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); g.setLineDash([]); g.fillStyle = muted; g.font = "11px system-ui"; g.fillText(l, x + 3, 11); };
+  if (P.frameDone) mark(P.frameDone, t("p.mark.frame")); mark(P.done, t("p.mark.done"));
+  if (P.t > 0) { const x = P.t / T * w; g.strokeStyle = "#dc2626"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+}
+function syncPlayer() {
+  const T = P.cfg ? P.cfg.T : 0;
+  $("pScrub").value = T ? Math.round(P.t / T * 1000) : 0; $("pTime").textContent = fmtT(P.t) + " / " + fmtT(T);
+  $("pPlay").textContent = playing ? "❚❚" : "▶";
+}
+const musicUrl = m => "/api/music/" + encodeURIComponent(m.id);
+function stopAudio() { audio.pause(); }
+function startAudio() {
+  // Musik läuft immer in normalem Tempo, unabhängig vom Vorschau-Tempo 2×/3×/5× (Roger 21.11.2026, 0.1.4)
+  if (!st.music || st.music.missing) return;
+  const url = musicUrl(st.music);
+  if (audio.dataset.src !== url) { audio.src = url; audio.dataset.src = url; }
+  audio.currentTime = P.t; audio.volume = musicVolume(P.t, P.cfg.T, +$("vol").value / 100, $("fade").checked);
+  audio.play().catch(() => {});
+}
+function pausePreview() { if (playing) { playing = false; stopAudio(); syncPlayer(); } }
+function loop(ts) {
+  if (!playing) return;
+  const speed = +$("pSpeed").value, dt = Math.min(.1, (ts - last) / 1000) * speed; last = ts;
+  let tt = P.t + dt; if (tt >= P.cfg.T) { tt = P.cfg.T; playing = false; stopAudio(); }
+  P.draw(tt);
+  if (!audio.paused) audio.volume = musicVolume(tt, P.cfg.T, +$("vol").value / 100, $("fade").checked);
+  syncPlayer(); drawChart(); if (playing) requestAnimationFrame(loop);
+}
+$("pPlay").onclick = () => {
+  if (!P.cfg) return;
+  if (!playing && P.t >= P.cfg.T) P.t = 0;
+  playing = !playing; last = performance.now(); syncPlayer();
+  if (playing) { stopPreview(); dStop(); startAudio(); requestAnimationFrame(loop); } else stopAudio();
+};
+$("pScrub").oninput = e => { if (!P.cfg) return; P.draw(P.cfg.T * e.target.value / 1000); if (!audio.paused) audio.currentTime = P.t; syncPlayer(); drawChart(); };
+$("pSpeed").onchange = () => { if (playing && audio.paused) startAudio(); };
+
+// ---------- Schritte links: Häkchen, Zusammenfassungen, Ablauf in der Vorschau ----------
+const STEP_KEYS = ["name", "motif", "crop", "music", "puzzle", "dur", "text", "share"];
+const STEP_PANEL = { name: "P27", motif: "P2", crop: "P19", music: "P26", puzzle: "P3", dur: "P4", text: "P5", share: "P7" };
+function stepDone() {
+  return { name: !!$("pzName").value.trim(), motif: !!st.img, crop: st.cropDone, music: !!st.music, puzzle: !!st.visited.P3,
+           dur: !!st.visited.P4, text: !!$("txt").value.trim(), share: !!st.link };
+}
+function drawSteps() {
+  const done = stepDone();
+  document.querySelectorAll("[data-tick]").forEach(x => x.classList.toggle("hidden", !done[x.dataset.tick]));
+  $("motifNow").classList.toggle("hidden", !st.img);
+  $("sumP2").textContent = st.img ? "" : t("p.needMotif");
+  const c = st.crop;
+  $("sumP19").textContent = !st.img ? "" : !c || (c.fmt === "photo" && !c.rot && c.z === 1) ? t("u.noCrop")
+    : [fmtLabel(c.fmt), ...(c.rot ? [t("u.rotated")] : []), ...(st.base ? [`${st.base.width} × ${st.base.height} px`] : [])].join(" · ");
+  $("sumP26").textContent = st.music ? st.music.name + (st.music.duration ? " · " + fmtT(st.music.duration) : "") : t("u.noMusic");
+  $("sumP3").textContent = t("u.puzzleSum", { pieces: t("p.pieces", { n: st.count }), start: t(START_KEYS[st.start] || "p.start.scatter") });
+  $("sumP4").textContent = t("u.tempoSum", { time: fmtT(duration()), tempo: $("tempo").value });
+  const txt = $("txt").value.trim().split(/\r?\n/)[0];
+  $("sumP5").textContent = txt ? `«${txt}» · ${fontLabel(st.textFont)}` : t("u.noText");
+  $("mkPvSum").textContent = P.cfg ? t("u.pvSum", { time: fmtT(P.done) }) : t("p.previewEmpty");
+  $("sumP7").textContent = st.link ? (st.link.url || st.link.path) : t("u.noLinkYet");
+  // Ablauf über der Vorschau
+  const n = STEP_KEYS.length, k = STEP_KEYS.filter(x => done[x]).length, next = STEP_KEYS.find(x => !done[x]);
+  $("mkProgN").textContent = next ? t("u.progNext", { done: k, n, next: tp("u.k.", next) }) : t("u.progress", { done: k, n });
+  $("mkProgList").replaceChildren(...STEP_KEYS.map(x => {
+    const li = el("li", done[x] ? "done" : x === next ? "next" : ""), b = el("button"); b.type = "button";
+    b.append(el("span", "", tp("u.k.", x))); b.title = (done[x] ? "✓ " : "") + tp("u.k.", x);
+    b.onclick = () => x === "name" ? $("pzName").focus() : go(STEP_PANEL[x]);
+    li.append(b); return li;
+  }));
+}
+
+// ---------- Name und Website-Titel ----------
+function webTitle() { return (st.link && st.link.own_title) || $("pzName").value.trim() || st.motifName || "Puzzle"; }
+function drawPvTitle() {
+  $("mkPvTitle").textContent = webTitle();
+  $("mkPvSrc").textContent = st.link && st.link.own_title ? t("u.pvSrcOwn") : t("u.pvSrcName");
+  $("mkWebTitle").placeholder = $("pzName").value.trim() || st.motifName || "";
+}
+$("pzName").oninput = () => { touch(); drawPvTitle(); if (P.cfg) { P.cfg.title = $("pzName").value.trim(); drawInfo(); } };
+$("mkWebTitle").onchange = e => { if (st.link) linkCall({ title: e.target.value.trim() }).catch(fail); };
+
+// ---------- P2 Motiv ----------
+function setMotif(img, name, asset, src) {
+  st.img = img; st.asset = asset || null; st.motifName = name || ""; st.motifSrc = src || "";
+  st.crop = newCrop(st.crop ? st.crop.fmt : "photo"); st.base = null; st.cropDone = false;
+  st.photoDirty = true; st.photoGen++;
+  drawMotif(img.src); touch(); rebuild();
+}
+function drawMotif(src) {
+  $("motifImg").src = src; $("motifName").textContent = st.motifName; $("motifSrc").textContent = st.motifSrc;
+  drawPvTitle();
+}
+$("uploadBtn").onclick = () => $("file").click();
+function useFile(f) {
+  if (!f || !f.type.startsWith("image/")) { toast(t("p.notImage"), true); return; }
+  loadImage(URL.createObjectURL(f)).then(img => { setMotif(img, f.name.replace(/\.[^.]+$/, ""), null, t("u.uploaded")); go("CLOSE", $("sideMotif")); }).catch(fail);
+}
+$("file").onchange = e => { useFile(e.target.files[0]); e.target.value = ""; };
+$("sideMotif").addEventListener("dragover", e => e.preventDefault());
+$("sideMotif").addEventListener("drop", e => { e.preventDefault(); useFile(e.dataTransfer.files[0]); });
+async function motifFromRef() {
+  const ids = $("mkMotifRef").value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi);
+  if (!ids) { toast(t("u.refBad"), true); return; }
+  const id = ids[ids.length - 1].toLowerCase();
+  try { setMotif(await loadImage(`/api/assets/${id}/preview`), t("u.fromLink"), id, "Immich"); $("mkMotifRef").value = ""; go("CLOSE", $("sideMotif")); } catch (e) { fail(e); }
+}
+$("mkRefApply").onclick = motifFromRef;
+$("mkMotifRef").addEventListener("keydown", e => { if (e.key === "Enter") motifFromRef(); });
+
+// ---------- P24 Fotos aus Immich, P25 Inhalt ----------
+const im = { tab: "alb", sort: "name", dir: 1, src: null, photo: null };
+async function loadSources() {
+  if (st.sources) { drawSources(); return; }
+  $("imBody").replaceChildren(); $("imInfo").textContent = t("src.loading"); $("imInfo").classList.remove("hidden");
+  try { st.sources = await api("GET", "/api/sources"); } catch (e) { drawSources(); $("imInfo").textContent = e.message; return; }
+  drawSources();
+}
+function srcDate(x) {
+  if (!x.start) return "";
+  const a = new Date(x.start), b = new Date(x.end || x.start), mm = d => String(d.getMonth() + 1).padStart(2, "0");
+  if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) return `${mm(a)}.${a.getFullYear()}`;
+  if (a.getFullYear() === b.getFullYear()) return String(a.getFullYear());
+  return `${a.getFullYear()}–${b.getFullYear()}`;
+}
+function srcItems(tab) {
+  const s = st.sources || { albums: [], people: [] };
+  return tab === "per" ? s.people : s.albums.filter(a => tab === "shr" ? a.other : !a.other);
+}
+function drawSources() {
+  $("imTabs").querySelectorAll("button").forEach(b => { b.textContent = tp("u.tab.", b.dataset.tab, { n: fmt(srcItems(b.dataset.tab).length) }); b.classList.toggle("on", b.dataset.tab === im.tab); });
+  const ths = $("sideImmich").querySelectorAll("th[data-sort]");
+  ths.forEach(th => { const k = th.dataset.sort; th.textContent = t({ name: "u.colName", count: "u.colCount", date: "u.colDate" }[k]) + (im.sort === k ? (im.dir > 0 ? " ▲" : " ▼") : ""); th.style.cursor = "pointer"; });
+  if (!st.sources) return;
+  const q = plain($("imFind").value.trim());
+  const key = { name: x => plain(x.name), count: x => x.count ?? -1, date: x => x.start || "" }[im.sort];
+  const list = srcItems(im.tab).filter(x => !q || plain(x.name).includes(q))
+    .sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * im.dir; }).slice(0, 300);
+  $("imInfo").classList.toggle("hidden", list.length > 0); $("imInfo").textContent = t("p.noMatch");
+  $("imBody").replaceChildren(...list.map(x => {
+    const tr = el("tr", im.src && im.src.id === x.id ? "sel" : "");
+    const go = el("button", "mkGo", "›"); go.type = "button"; go.title = t("u.showContent"); go.setAttribute("aria-label", t("u.showContent") + ": " + x.name);
+    const td = el("td", "go"); td.append(go);
+    tr.append(el("td", "", x.name), el("td", "n", x.count == null ? "–" : fmt(x.count)), el("td", "", srcDate(x)), td);
+    tr.style.cursor = "pointer"; tr.onclick = () => openSource(x);
+    return tr;
+  }));
+}
+$("imTabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; im.tab = b.dataset.tab; drawSources(); };
+$("imFind").oninput = drawSources;
+$("sideImmich").querySelectorAll("th[data-sort]").forEach(th => th.onclick = () => {
+  if (im.sort === th.dataset.sort) im.dir = -im.dir; else { im.sort = th.dataset.sort; im.dir = th.dataset.sort === "name" ? 1 : -1; }
+  drawSources();
+});
+async function openSource(x) {
+  im.src = { id: x.id, name: x.name, kind: im.tab }; im.photo = null; drawSources();
+  $("albTitle").textContent = x.name; $("albInfo").textContent = t("src.loading"); $("albGrid").replaceChildren(); $("albUse").disabled = true;
+  go("P25");
+  try {
+    const res = await api("POST", "/api/photos", im.tab === "per" ? { people: [x.id] } : { albums: [x.id] });
+    if (!im.src || im.src.id !== x.id) return;
+    const photos = res.photos || [];
+    $("albInfo").textContent = photos.length ? t("u.albInfo", { n: photos.length }) : t("p.noPhotos");
+    $("albGrid").replaceChildren(...photos.map(p => {
+      const img = el("img"); img.loading = "lazy"; img.alt = ""; img.src = `/api/assets/${p.id}/thumb`; img.tabIndex = 0;
+      const pick = () => { im.photo = p; $("albGrid").querySelectorAll("img").forEach(y => y.classList.toggle("on", y === img)); $("albUse").disabled = false; };
+      img.onclick = pick; img.ondblclick = () => { pick(); $("albUse").click(); };
+      img.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
+      return img;
+    }));
+  } catch (e) { $("albInfo").textContent = e.message; }
+}
+$("albUse").onclick = async () => {
+  const p = im.photo, s = im.src; if (!p || !s) return;
+  $("albUse").disabled = true;
+  try { setMotif(await loadImage(`/api/assets/${p.id}/preview`), s.name + (p.date ? " · " + fmtDate(p.date) : ""), p.id, "Immich"); go("CLOSE", $("sideMotif")); }
+  catch (e) { fail(e); } finally { $("albUse").disabled = false; }
+};
+
+// ---------- P19 Motiv bearbeiten: Format, Drehen, Ausschnitt (Werte in % der Bühne) ----------
+let draft = null;
+function newCrop(fmt) { return { fmt, rot: 0, z: 1, x: null, y: null, pw: fmt === "free" ? 100 : 90, ph: fmt === "free" ? 100 : 90 }; }
+function rotated(rot) {
+  const s = st.img, w = s.naturalWidth || s.width, h = s.naturalHeight || s.height;
+  if (!rot) return { src: s, W: w, H: h };
+  const c = document.createElement("canvas"), q = rot % 2 === 1; c.width = q ? h : w; c.height = q ? w : h;
+  const g = c.getContext("2d"); g.translate(c.width / 2, c.height / 2); g.rotate(rot * Math.PI / 2); g.drawImage(s, -w / 2, -h / 2);
+  return { src: c, W: c.width, H: c.height };
+}
+function cropGeo(c, W, H) {  // Bühnen-Seitenverhältnis, Bildgrösse und Rahmen in %
+  const a = W / H, free = c.fmt === "free", R = free ? a : (ratio(c.fmt) || a);
+  let iw, ih;
+  if (free) { iw = ih = 100 * c.z; }
+  else if (R > a) { iw = 90 * c.z; ih = 90 * R / a * c.z; }
+  else { ih = 90 * c.z; iw = 90 * a / R * c.z; }
+  const pw = free ? c.pw : 90, ph = free ? c.ph : 90, fl = (100 - pw) / 2, ft = (100 - ph) / 2;
+  if (c.x == null) { c.x = fl + (pw - iw) / 2; c.y = ft + (ph - ih) / 2; }
+  c.x = clamp(c.x, fl + pw - iw, fl); c.y = clamp(c.y, ft + ph - ih, ft);
+  return { R, iw, ih, pw, ph, fl, ft };
+}
+function baseFromCrop(c) {
+  const r = rotated(c.rot), g0 = cropGeo(c, r.W, r.H);
+  const sx = (g0.fl - c.x) / g0.iw * r.W, sy = (g0.ft - c.y) / g0.ih * r.H, sw = g0.pw / g0.iw * r.W, sh = g0.ph / g0.ih * r.H;
+  const k = Math.min(1, 1600 / Math.max(sw, sh)), out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(sw * k)); out.height = Math.max(1, Math.round(sh * k));
+  out.getContext("2d").drawImage(r.src, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  return out;
+}
+let cropSrc = null;
+function openCrop() {
+  draft = { ...(st.crop || newCrop("photo")) };
+  $("cropFmt").replaceChildren(...FORMATS.map(f => {
+    const b = el("button"); b.type = "button"; b.dataset.r = f; b.setAttribute("role", "radio");
+    const i = el("i", "mkAr" + (f === "free" ? " free" : "")), r = ratio(f) || (f === "free" ? 1.3 : 1.4);
+    i.style.width = (r >= 1 ? 16 : 16 * r) + "px"; i.style.height = (r >= 1 ? 16 / r : 16) + "px";
+    b.append(i, el("span", "", fmtLabel(f))); b.onclick = () => { draft = { ...newCrop(f), rot: draft.rot }; drawCrop(true); };
+    return b;
+  }));
+  drawCrop(true);
+}
+function drawCrop(newSrc) {
+  if (!st.img || !draft) return;
+  if (newSrc || !cropSrc) { const r = rotated(draft.rot); cropSrc = r; $("cropImg").src = r.src.toDataURL ? r.src.toDataURL("image/jpeg", .9) : r.src.src; }
+  const g0 = cropGeo(draft, cropSrc.W, cropSrc.H), stage = $("cropStage");
+  stage.style.aspectRatio = String(g0.R);
+  stage.style.width = `min(100%, ${Math.round(340 * g0.R)}px)`;
+  Object.assign($("cropImg").style, { left: draft.x + "%", top: draft.y + "%", width: g0.iw + "%", height: g0.ih + "%" });
+  Object.assign($("cropFrame").style, { left: g0.fl + "%", top: g0.ft + "%", width: g0.pw + "%", height: g0.ph + "%" });
+  $("cropFrame").classList.toggle("free", draft.fmt === "free");
+  $("cropFrame").querySelectorAll("i").forEach(i => i.classList.toggle("hidden", draft.fmt !== "free"));
+  $("cropFmt").querySelectorAll("button").forEach(b => { const on = b.dataset.r === draft.fmt; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
+  $("cropZoom").value = draft.z;
+  const w = Math.round(g0.pw / g0.iw * cropSrc.W), h = Math.round(g0.ph / g0.ih * cropSrc.H), k = Math.min(1, 1600 / Math.max(w, h));
+  $("cropInfo").textContent = t("u.cropInfo", { w: Math.round(w * k), h: Math.round(h * k) });
+}
+$("cropZoom").oninput = e => {
+  const r = cropSrc, g0 = cropGeo(draft, r.W, r.H);
+  const fx = (g0.fl + g0.pw / 2 - draft.x) / g0.iw, fy = (g0.ft + g0.ph / 2 - draft.y) / g0.ih;
+  draft.z = +e.target.value;
+  const g1 = cropGeo({ ...draft, x: 0, y: 0 }, r.W, r.H);
+  draft.x = g1.fl + g1.pw / 2 - fx * g1.iw; draft.y = g1.ft + g1.ph / 2 - fy * g1.ih;
+  drawCrop();
+};
+$("cropRotL").onclick = () => { draft = { ...draft, rot: (draft.rot + 3) % 4, z: 1, x: null, y: null }; drawCrop(true); };
+$("cropRotR").onclick = () => { draft = { ...draft, rot: (draft.rot + 1) % 4, z: 1, x: null, y: null }; drawCrop(true); };
+$("cropWhole").onclick = () => { draft = newCrop("photo"); drawCrop(true); };
+{
+  let drag = null;
+  $("cropStage").addEventListener("pointerdown", e => {
+    if (!draft) return;
+    const r = $("cropStage").getBoundingClientRect(), h = e.target.dataset && e.target.dataset.h;
+    drag = { h, x0: e.clientX, y0: e.clientY, W: r.width, H: r.height, c: { ...draft } };
+    $("cropStage").classList.add("drag"); $("cropStage").setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  $("cropStage").addEventListener("pointermove", e => {
+    if (!drag) return;
+    const dx = (e.clientX - drag.x0) / drag.W * 100, dy = (e.clientY - drag.y0) / drag.H * 100, c = drag.c;
+    if (drag.h) {
+      const sx = drag.h.includes("e") ? 1 : -1, sy = drag.h.includes("s") ? 1 : -1;
+      draft.pw = clamp(c.pw + 2 * sx * dx, 10, 100); draft.ph = clamp(c.ph + 2 * sy * dy, 10, 100);
+      draft.x = c.x; draft.y = c.y;
+    } else { draft.x = c.x + dx; draft.y = c.y + dy; }
+    drawCrop();
+  });
+  const end = () => { drag = null; $("cropStage").classList.remove("drag"); };
+  $("cropStage").addEventListener("pointerup", end); $("cropStage").addEventListener("pointercancel", end);
+  $("cropFrame").addEventListener("keydown", e => {
+    const d = e.shiftKey ? 5 : 1, m = { ArrowLeft: [d, 0], ArrowRight: [-d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
+    if (!m || !draft) return; e.preventDefault(); draft.x += m[0]; draft.y += m[1]; drawCrop();
+  });
+}
+$("cropOk").onclick = () => {
+  if (!draft) return;
+  st.crop = draft; draft = null; st.base = null; st.cropDone = true; st.photoDirty = true; st.photoGen++;
+  touch(); rebuild(); go("CLOSE", $("sideCrop"));
+};
+
+// ---------- P3 Puzzle ----------
+PUZZLE_COUNTS.forEach(n => { const b = el("button", "", String(n)); b.type = "button";
+  b.onclick = () => { st.count = n; drawControls(); touch(); rebuild(); }; $("counts").append(b); });
+$("startPick").onclick = e => { const b = e.target.closest("button"); if (!b) return; st.start = b.dataset.s; drawControls(); touch(); rebuild(); };
+// Regler «Rahmen fertig nach» nur zeigen, wenn «Zuerst den Rahmen» an ist
+function syncFrameOnly() { const on = $("optFrame").checked; $("mkFrameOnly").classList.toggle("hidden", !on); $("mkFrameNote").classList.toggle("hidden", !on); }
+for (const id of ["optRot", "optFrame", "optGhost"]) $(id).addEventListener("change", () => { touch(); rebuild(id === "optGhost"); syncFrameOnly(); });
+$("reshuffle").onclick = () => { st.seed = Math.floor(Math.random() * 1e6); touch(); rebuild(); };
+
+// ---------- P4 Dauer und Tempo ----------
+let tempoTimer;
+for (const id of ["hold", "tempo", "mkRahmen", "mkRamp", "durSec"]) {
+  $(id).addEventListener("input", () => { drawControls(); clearTimeout(tempoTimer); tempoTimer = setTimeout(() => rebuild(), 120); drawTempo(); });
+  $(id).addEventListener("change", () => { touch(); rebuild(); });
+}
+$("durTabs").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.d === "music" && !(st.music && st.music.duration)) { toast(t("p.pickMusicFirst")); return; }
+  st.durMode = b.dataset.d; drawControls(); touch(); rebuild();
+};
+function curveNow() {
+  if (P.cfg && P.curve) return { cv: P.curve, N: P.pieces.length };
+  const [c, r] = grid(st.count, st.base ? st.base.width / st.base.height : 1.5), N = c * r;
+  return { cv: tempoCurve({ T: duration(), hold: +$("hold").value, tempo: +$("tempo").value / 100, frameAt: +$("mkRahmen").value, ramp: +$("mkRamp").value,
+                            frame: $("optFrame").checked, N, EDGE: 2 * (c + r) - 4 }), N, EDGE: 2 * (c + r) - 4 };
+}
+function drawTempo() {
+  let { cv, N, EDGE } = curveNow();
+  if (EDGE == null) EDGE = P.pieces ? P.pieces.filter(p => p.edge).length : 0;
+  const T = cv.T, X = s => (s / T * 450).toFixed(1), Y = r => (100 - r / (cv.peak || 1) * 90).toFixed(1);
+  const pts = cv.rate.map((r, i) => `${X(i * cv.STEP)},${Y(r)}`);
+  $("mkTLine").setAttribute("d", "M" + pts.join(" L"));
+  $("mkTArea").setAttribute("d", `M0,100 L${pts.join(" L")} L${X(cv.END)},100 Z`);
+  const pct = s => (s / T * 100).toFixed(2) + "%";
+  $("mkTRm").classList.toggle("hidden", cv.tR == null);
+  if (cv.tR != null) $("mkTRm").style.left = pct(cv.tR);
+  $("mkTFm").style.left = pct(cv.END); $("mkTZ").style.left = pct(cv.END);
+  const stat = (k, v) => { const s = el("span"), b = el("b", "", v); s.append(k + " ", b); return s; };
+  $("mkTStats").replaceChildren(stat(t("u.tDur"), fmtT(T)), stat(t("u.tDone"), fmtT(cv.END)),
+    ...(cv.tR != null ? [stat(t("u.tFrame"), fmtT(cv.tR))] : []), stat(t("u.tPeak"), `${cv.peak.toFixed(1)} ${t("u.perSec")}`));
+  const seg = [];
+  if (cv.tR != null) {
+    seg.push(stat(`${t("u.tFrameSeg")} (${EDGE}) ${t("u.until")} ${fmtT(cv.tR)}:`, `${t("u.avg")} ${(EDGE / Math.max(.1, cv.tR - cv.T0)).toFixed(1)} ${t("u.perSec")}`));
+    seg.push(stat(`${t("u.tInner")} (${N - EDGE}) ${t("u.until")} ${fmtT(cv.END)}:`, `${t("u.avg")} ${((N - EDGE) / Math.max(.1, cv.END - cv.tR)).toFixed(1)} ${t("u.perSec")}`));
+  }
+  $("mkTSeg").replaceChildren(...seg); $("mkTSeg").classList.toggle("hidden", !seg.length);
+}
+
+// ---------- P5 Schriftzug ----------
+const FONT_NAMES = { roboto: "Roboto", sourceserif: "Source Serif", amatic: "Amatic SC", opensans: "Open Sans", lato: "Lato", montserrat: "Montserrat",
+  bebas: "Bebas Neue", anton: "Anton", archivo: "Archivo Black", lilita: "Lilita One", fredoka: "Fredoka", chewy: "Chewy", luckiest: "Luckiest Guy" };
+const fontLabel = k => CFONTS[k] ? FONT_NAMES[k] || k : tp("u.f.", k);
+const COLOR_KEYS = ["white", "black", "grey", "gold", "yellow", "orange", "red", "pink", "violet", "blue", "lightblue", "green", "darkgreen", "brown"];
+function fontButtons(box, keys) {
+  box.replaceChildren(...keys.map(k => {
+    const b = el("button", "", fontLabel(k)); b.type = "button"; b.dataset.f = k; b.setAttribute("role", "radio");
+    b.style.fontFamily = FONTS[k]; b.style.fontWeight = CFONTS[k] ? "400" : "700";
+    b.onclick = () => { st.textFont = k; loadFont(k).then(() => { drawTextPanel(); rebuild(true); }); drawTextPanel(); touch(); rebuild(true); };
+    return b;
+  }));
+}
+fontButtons($("fontSys"), Object.keys(FONTS).filter(k => !CFONTS[k]));
+fontButtons($("fontCol"), Object.keys(CFONTS));
+$("mkPos").replaceChildren(...TEXT_POS.map(p => {
+  const b = el("button"); b.type = "button"; b.dataset.p = p; b.setAttribute("role", "radio"); b.append(el("i"));
+  b.onclick = () => { st.textPos = p; drawTextPanel(); touch(); rebuild(true); };
+  return b;
+}));
+TEXT_COLORS.forEach((col, i) => { const b = el("button", "col"); b.type = "button"; b.dataset.c = col; b.style.background = col;
+  b.onclick = () => { st.textColor = col; drawTextPanel(); touch(); rebuild(true); }; $("txtCol").insertBefore(b, $("txtCol").lastElementChild); b.dataset.k = COLOR_KEYS[i]; });
+$("mkColPick").addEventListener("input", e => { st.textColor = e.target.value; drawTextPanel(); });
+$("mkColPick").addEventListener("change", e => { st.textColor = e.target.value; drawTextPanel(); touch(); rebuild(true); });
+function drawTextPanel() {
+  const box = $("mkTxtBox"), out = $("mkTxtOut"), prev = $("mkTxtPrev");
+  if (st.base) { prev.style.aspectRatio = `${st.base.width}/${st.base.height}`; const u = st.base.toDataURL("image/jpeg", .7); if ($("mkTxtImg").dataset.v !== String(st.photoGen) + st.base.width) { $("mkTxtImg").src = u; $("mkTxtImg").dataset.v = String(st.photoGen) + st.base.width; } }
+  box.className = "mkTxtBox pos-" + st.textPos;
+  out.textContent = $("txt").value;
+  out.style.whiteSpace = "pre-line";
+  out.style.fontFamily = FONTS[st.textFont]; out.style.fontWeight = CFONTS[st.textFont] ? "400" : "700";
+  out.style.fontSize = ((prev.clientWidth || 300) / 16 * (+$("mkSize").value) / 100) + "px";
+  out.style.color = st.textColor;
+  out.style.textShadow = darkColor(st.textColor) ? "0 1px 4px rgba(255,255,255,.7)" : "0 1px 4px rgba(0,0,0,.7)";
+  document.querySelectorAll(".mkFont button").forEach(b => { const on = b.dataset.f === st.textFont; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
+  $("mkPos").querySelectorAll("button").forEach(b => { const on = b.dataset.p === st.textPos; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); b.title = b.ariaLabel = tp("u.p.", b.dataset.p); b.setAttribute("aria-label", tp("u.p.", b.dataset.p)); });
+  $("txtCol").querySelectorAll("button.col").forEach(b => { b.classList.toggle("on", b.dataset.c === st.textColor); b.title = tp("u.c.", b.dataset.k); b.setAttribute("aria-label", tp("u.c.", b.dataset.k)); });
+  const own = !TEXT_COLORS.includes(st.textColor);
+  $("txtCol").querySelector(".mkCustom").classList.toggle("on", own);
+  if (own) { $("mkColPick").value = st.textColor; $("txtCol").querySelector(".mkCustom").style.background = st.textColor; }
+  else $("txtCol").querySelector(".mkCustom").style.background = "";
+}
+let txtTimer; $("txt").oninput = () => { drawTextPanel(); touch(); clearTimeout(txtTimer); txtTimer = setTimeout(() => rebuild(true), 250); };
+$("mkSize").addEventListener("input", () => { drawControls(); });
+$("mkSize").addEventListener("change", () => { touch(); rebuild(true); });
+$("txtMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; st.textMode = b.dataset.m; drawControls(); touch(); rebuild(true); };
+
+// ---------- P26 Musik ----------
+async function loadTracks() {
+  try { st.tracks = (await api("GET", "/api/music")).tracks || []; } catch (e) { st.tracks = []; fail(e); }
+  if (st.music) { const found = st.tracks.find(x => x.id === st.music.id); if (found) st.music = found; }
+  drawTracks(); drawWelcome();
+}
+function measure(track) {  // Ohne Länge vom Server misst der Browser selbst
+  return new Promise(ok => { const a = new Audio(); a.preload = "metadata"; a.onloadedmetadata = () => { track.duration = isFinite(a.duration) ? Math.round(a.duration * 10) / 10 : null; ok(); }; a.onerror = () => ok(); a.src = musicUrl(track); });
+}
+let previewId = null;
+function stopPreview() { if (previewId) { previewId = null; audio.pause(); drawTracks(); } }
+function drawTracks() {
+  const q = plain($("trackSearch").value.trim());
+  const list = st.tracks.filter(x => !q || plain(x.name + " " + x.group).includes(q)).slice(0, 150);
+  const row = (track, label, sub, dur) => {
+    const d = el("div", "track" + ((track ? st.music && st.music.id === track.id : !st.music) ? " on" : ""));
+    if (track) { const pl = el("button", "pl", previewId === track.id ? "❚❚" : "▶"); pl.type = "button"; pl.title = t("p.listen"); d.append(pl); }
+    else d.append(el("span", "nopl", "–"));
+    const n = el("span", "t", label);
+    if (sub) n.append(el("small", "", sub));
+    d.append(n, el("span", "d", dur ? fmtT(dur) : ""));
+    d.onclick = async e => {
+      if (e.target.closest(".pl")) {
+        if (previewId === track.id) { stopPreview(); return; }
+        pausePreview(); previewId = track.id; audio.src = musicUrl(track); audio.dataset.src = ""; audio.volume = .8; audio.play().catch(() => {}); drawTracks(); return;
+      }
+      st.music = track;
+      if (track && track.duration == null) await measure(track);
+      if (track && st.durMode === "own" && !st.id && track.duration) st.durMode = "music";
+      if (!track && st.durMode === "music") st.durMode = "own";
+      drawControls(); touch(); rebuild();
+    };
+    return d;
+  };
+  $("tracks").replaceChildren(row(null, t("p.noMusic")), ...list.map(x => row(x, x.name, x.own ? t("p.ownTrack") : x.group, x.duration)));
+  if (st.music && st.music.missing) $("tracks").append(el("p", "error", t("p.musicMissing", { name: st.music.name })));
+}
+$("trackSearch").oninput = drawTracks;
+$("musicFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return; e.target.value = "";
+  toast(t("p.uploading"));
+  try {
+    const res = await fetch("/api/music", { method: "POST", body: f, headers: { "X-Music-Upload": "1", "X-File-Name": encodeURIComponent(f.name) } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(srvText(data, "error") || `HTTP ${res.status}`);
+    await loadTracks();
+    const track = st.tracks.find(x => x.id === data.id) || data;
+    if (track.duration == null) await measure(track);
+    st.music = track; if (track.duration) st.durMode = "music";
+    drawControls(); touch(); rebuild(); toast(t("p.uploaded"));
+  } catch (err) { fail(err); }
+};
+$("vol").addEventListener("input", () => { if (!audio.paused && P.cfg) audio.volume = musicVolume(P.t, P.cfg.T, +$("vol").value / 100, $("fade").checked); });
+$("vol").addEventListener("change", touch);
+$("fade").addEventListener("change", touch);
+audio.addEventListener("ended", () => { if (previewId) stopPreview(); });
+
+// ---------- P22 Bisherige Puzzles ----------
+async function loadPuzzles() {
+  try {
+    const res = await api("GET", "/api/puzzles");
+    st.puzzles = res.puzzles; st.share = { enabled: res.enabled, url: res.url, prefix: res.prefix };
+  } catch (e) { fail(e); }
+  drawPuzzles(); drawState(); loadShares();
+}
+function drawPuzzles() {
+  const items = st.puzzles;
+  $("historySum").textContent = !items.length ? t("hist.noneSum") : t("hist.sum", { n: items.length, date: fmtDate(items[0].updated * 1000) });
+  $("histSearch").classList.toggle("hidden", !items.length);
+  $("plistEmpty").classList.toggle("hidden", items.length > 0);
+  $("plist").replaceChildren(...items.map(p => {
+    const row = el("div", "hist" + (p.id === puzzleDetailId ? " on" : "")); row.dataset.id = p.id; row.dataset.name = plain(p.name || "");
+    const img = el("img"); img.alt = ""; img.loading = "lazy"; img.src = p.thumb;
+    const open = el("button", "open"); open.type = "button"; open.setAttribute("aria-pressed", String(p.id === puzzleDetailId));
+    const sub = [t("p.pieces", { n: p.count }), fmtT(p.T), fmtDate(p.updated * 1000), p.link ? (p.link.active && !p.link.expired ? t("p.linked") : t("p.linkOff")) : ""].filter(Boolean).join(" · ");
+    open.append(el("strong", "", p.name + (p.id === st.id ? " ✎" : "")), el("span", "histSub", sub));
+    open.onclick = () => setPuzzleDetail(p.id);
+    const del = el("button", "danger", t("u.delete")); del.type = "button";
+    del.onclick = () => deletePuzzle(p.id);
+    row.append(img, open, del);
+    return row;
+  }));
+  filterHistory(); drawPuzzleDetail(); drawWelcome();
+}
+function filterHistory() {
+  const query = plain($("histSearch").value.trim()), rows = [...$("plist").children];
+  for (const row of rows) row.classList.toggle("hidden", !row.dataset.name.includes(query));
+  $("histNone").classList.toggle("hidden", !rows.length || rows.some(r => !r.classList.contains("hidden")));
+}
+$("histSearch").addEventListener("input", filterHistory);
+async function deletePuzzle(id) {
+  if (!id || !confirm(t("p.deleteAsk"))) return;
+  try {
+    await api("DELETE", `/api/puzzles/${id}`);
+    if (st.id === id) { st.dirty = false; resetEditor(); }
+    if (puzzleDetailId === id) go("CLOSE", $("sidePuzzle"));
+    await loadPuzzles(); toast(t("p.deleted"));
+  } catch (e) { fail(e); }
+}
+
+// ---------- P23 Ein Puzzle: Vorschau zum Abspielen, Bearbeiten, Einstellungen übernehmen, Löschen ----------
+var puzzleDetailId = null, puzzleDetail = null;
+const DP = new Puzzle($("pzCanvas")), dAudio = new Audio();
+let dPlaying = false, dLast = 0;
+function dStop() { dPlaying = false; dAudio.pause(); dSync(); }
+function dSync() {
+  const T = DP.cfg ? DP.cfg.T : 0;
+  $("pzScrub").value = T ? Math.round(DP.t / T * 1000) : 0; $("pzTime").textContent = fmtT(DP.t) + " / " + fmtT(T);
+  $("pzPlay").textContent = dPlaying ? "❚❚" : "▶";
+  $("pzPlay").disabled = $("pzScrub").disabled = !DP.cfg;
+}
+function dClear() {
+  dStop(); DP.cfg = null;
+  const g = $("pzCanvas").getContext("2d"); g.clearRect(0, 0, $("pzCanvas").width, $("pzCanvas").height); dSync();
+}
+function dLoop(ts) {
+  if (!dPlaying || !DP.cfg) return;
+  let tt = DP.t + Math.min(.1, (ts - dLast) / 1000); dLast = ts;
+  if (tt >= DP.cfg.T) { tt = DP.cfg.T; dPlaying = false; dAudio.pause(); }
+  DP.draw(tt);
+  const m = DP.cfg.music; if (m && !dAudio.paused) dAudio.volume = musicVolume(tt, DP.cfg.T, m.volume, m.fade);
+  dSync(); if (dPlaying) requestAnimationFrame(dLoop);
+}
+$("pzPlay").onclick = () => {
+  if (!DP.cfg) return;
+  if (dPlaying) { dStop(); return; }
+  if (DP.t >= DP.cfg.T) DP.t = 0;
+  pausePreview(); stopPreview();
+  dPlaying = true; dLast = performance.now(); dSync();
+  const m = DP.cfg.music;
+  if (m) { dAudio.src = musicUrl(m); dAudio.currentTime = DP.t; dAudio.volume = musicVolume(DP.t, DP.cfg.T, m.volume, m.fade); dAudio.play().catch(() => {}); }
+  requestAnimationFrame(dLoop);
+};
+$("pzScrub").oninput = e => { if (!DP.cfg) return; DP.draw(DP.cfg.T * e.target.value / 1000); if (!dAudio.paused) dAudio.currentTime = DP.t; dSync(); };
+async function setPuzzleDetail(id) {
+  if (id !== puzzleDetailId) dClear();
+  puzzleDetailId = id; puzzleDetail = null;
+  document.querySelectorAll("#plist .hist").forEach(r => { const on = r.dataset.id === id; r.classList.toggle("on", on); r.querySelector(".open").setAttribute("aria-pressed", String(on)); });
+  if (!id) return;
+  drawPuzzleDetail(); go("P23");
+  try {
+    const p = await api("GET", `/api/puzzles/${id}`); if (puzzleDetailId !== id) return;
+    puzzleDetail = p; drawPuzzleDetail();
+    const img = await loadImage(p.photo); if (puzzleDetailId !== id) return;
+    const c = puzzleConfig(p.config, img);
+    if (CFONTS[c.textFont]) await loadFont(c.textFont);
+    DP.setup(puzzleConfig(p.config, img)); DP.draw(0); dSync();
+  } catch (e) { fail(e); }
+}
+function gridRows(box, rows) {
+  box.replaceChildren(...rows.flatMap(([k, v]) => [el("dt", "", k), el("dd", "", v)]));
+}
+function drawPuzzleDetail() {
+  if (!puzzleDetailId) return;
+  const p = st.puzzles.find(x => x.id === puzzleDetailId);
+  if (!p) return;
+  $("pzTitle").textContent = p.name;
+  const c = (puzzleDetail && puzzleDetail.id === p.id && puzzleDetail.config) || {};
+  const flags = [c.rot && t("p.rot"), c.frame && t("p.frame"), c.ghost && t("p.ghost")].filter(Boolean);
+  const l = p.link;
+  const status = !l ? t("pz.noLink") : l.expired ? t("p.state.expired") : l.active === false ? t("p.state.off") : l.pending ? t("sh.from", { date: fmtDate(l.valid_from * 1000) }) : t("p.linked");
+  gridRows($("pzFacts"), [
+    [t("pz.length"), fmtT(p.T)],
+    [t("pz.created"), fmtDate(p.created * 1000)],
+    [t("pz.updated"), fmtDate(p.updated * 1000)],
+    [t("p.count"), t("p.pieces", { n: p.count })],
+    [t("u.format"), fmtLabel(p.format || "photo")],
+    ...(c.start ? [[t("p.startLbl"), [t(START_KEYS[c.start] || "p.start.scatter"), ...flags].join(" · ")]] : []),
+    ...(puzzleDetail ? [[t("pz.music"), c.music ? c.music.name : t("p.noMusic")]] : []),
+    ...(c.text ? [[t("u.text"), c.text.replace(/\s*\n\s*/g, " / ") + " · " + fontLabel(c.textFont || "hand")]] : []),
+    [t("pz.link"), status + (l && l.protected ? " · " + t("sh.protected") : "")],
+    ...(l ? [[t("pz.valid"), l.expires_at ? fmtDate(l.expires_at * 1000) : t("sh.unlimited")], [t("pz.views"), shareViews(l)]] : [])]);
+  $("pzLinkBox").classList.toggle("hidden", !l);
+  if (l) $("pzUrl").textContent = l.url || l.path;
+}
+$("pzEdit").onclick = async () => { const id = puzzleDetailId; if (!id) return; dStop(); await openPuzzle(id); if (st.id === id) go("HOME"); };
+// «Nur Einstellungen übernehmen» (wie bei Reels): neues Puzzle mit denselben Einstellungen, ohne Motiv und Name
+$("pzReuse").onclick = async () => {
+  const c = puzzleDetail && puzzleDetail.config; if (!c) return;
+  dStop(); await save().catch(fail); resetEditor();
+  applyConfig({ ...c, seed: st.seed, title: "" });
+  st.crop = newCrop(c.format || "photo");
+  drawSteps(); go("P2"); toast(t("u.reused"));
+};
+$("pzDel").onclick = () => deletePuzzle(puzzleDetailId);
+$("pzUrlCopy").onclick = () => { const p = st.puzzles.find(x => x.id === puzzleDetailId); if (p && p.link) copyText(p.link.url || p.link.path); };
+$("pzToShares").onclick = () => { const id = puzzleDetailId; shareFilterValue = "all"; shareDetailId = id; go("P10"); };
+window.addEventListener("resize", () => { if (DP.cfg && shown.includes("P23")) { DP.resize(); dSync(); } });
+
+// ---------- Neu, öffnen ----------
+function resetEditor() {
+  playing = false; stopAudio(); stopPreview();
+  Object.assign(st, { id: null, img: null, base: null, asset: null, motifName: "", motifSrc: "", photoDirty: false, dirty: false, link: null,
+                      cropDone: false, visited: {}, seed: Math.floor(Math.random() * 1e6) });
+  applyConfig({ count: 100, format: "photo", start: "scatter", rot: false, frame: true, ghost: false, seed: st.seed, T: 45, durMode: "own", hold: 5,
+                tempo: .5, frameAt: 40, ramp: 5, textSize: 100, title: "", text: "", textMode: "in", textFont: "hand", textPos: "mc", textColor: "#ffffff", music: null });
+  $("motifImg").removeAttribute("src");
+  P.cfg = null; const g = $("pCanvas").getContext("2d"); g.clearRect(0, 0, $("pCanvas").width, $("pCanvas").height);
+  $("pEmpty").classList.remove("hidden"); $("stats").replaceChildren(); $("gridInfo").textContent = ""; drawChart(); syncPlayer();
+  history.replaceState(null, "", "/"); drawPuzzles(); drawState(); drawPvTitle(); drawTextPanel();
+}
+async function openPuzzle(id) {
+  await save().catch(fail);
+  playing = false; stopAudio(); stopPreview();
+  try {
+    const p = await api("GET", `/api/puzzles/${id}`);
+    const img = await loadImage(p.photo);
+    st.id = p.id; st.asset = p.asset; st.link = p.link; st.motifName = p.name; st.motifSrc = "";
+    applyConfig(p.config);
+    st.img = img; st.base = null; st.photoDirty = false; st.dirty = false; st.cropDone = true; st.visited = { P3: true, P4: true };
+    drawMotif(p.photo);
+    history.replaceState(null, "", "/?id=" + p.id);
+    if (CFONTS[st.textFont]) await loadFont(st.textFont);
+    rebuild(); drawPuzzles(); drawLink(); drawState(); drawTextPanel();
+  } catch (e) { fail(e); }
+}
+$("newBtn").onclick = async () => { await save().catch(fail); resetEditor(); go("HOME"); };
+$("delBtn").onclick = () => deletePuzzle(st.id);
+
+// ---------- P7 Teilen ----------
+function linkUrl() { return st.link ? (st.link.url || st.link.path) : ""; }
+function drawLink() {
+  drawState(); drawPvTitle();
+  const l = st.link; if (!l) return;
+  $("linkTxt").textContent = linkUrl();
+  if (document.activeElement !== $("mkWebTitle")) $("mkWebTitle").value = l.own_title ? l.title : "";
+  $("lkActive").checked = l.active; $("lkPw").checked = l.protected; $("lkDl").checked = l.download; $("lkMeta").checked = l.metadata;
+  $("pwRow").classList.add("hidden");
+  const days = l.days === "until" ? "until" : String(l.days ?? 0);
+  $("lkDays").value = [...$("lkDays").options].some(o => o.value === days) ? days : "until";
+  const state = [];
+  if (!l.active) state.push(t("p.state.off"));
+  if (l.expired) state.push(t("p.state.expired"));
+  else if (l.expires_at) state.push(t("p.state.until", { date: fmtDate(l.expires_at * 1000) }));
+  state.push(t("p.state.views", { n: l.views }));
+  $("linkState").textContent = state.join(" · ");
+  try { $("ogHost").textContent = new URL(linkUrl(), location.href).host; } catch { $("ogHost").textContent = ""; }
+  drawInfo();
+}
+async function linkCall(body) {
+  const p = await api("POST", `/api/puzzles/${st.id}/link`, body);
+  st.link = p.link; drawLink(); loadPuzzles();
+}
+$("mkLink").onclick = async () => {
+  try {
+    st.dirty = st.dirty || !st.id; await save();
+    await linkCall({ download: false, days: 30 });
+    toast(t("p.linkMade"));
+  } catch (e) { fail(e); }
+};
+$("lkActive").onchange = e => linkCall({ active: e.target.checked }).catch(err => { fail(err); drawLink(); });
+$("lkDl").onchange = e => linkCall({ download: e.target.checked }).catch(err => { fail(err); drawLink(); });
+$("lkMeta").onchange = e => linkCall({ metadata: e.target.checked }).catch(err => { fail(err); drawLink(); });
+$("lkDays").onchange = e => { if (e.target.value === "until") return; linkCall({ days: +e.target.value }).catch(err => { fail(err); drawLink(); }); };
+$("lkPw").onchange = e => {
+  if (e.target.checked) { $("pwRow").classList.remove("hidden"); $("pwInput").focus(); return; }
+  $("pwRow").classList.add("hidden");
+  if (st.link.protected) linkCall({ password: null }).then(() => toast(t("p.pwRemoved"))).catch(err => { fail(err); drawLink(); });
+};
+$("pwSet").onclick = () => linkCall({ password: $("pwInput").value }).then(() => { $("pwInput").value = ""; toast(t("p.pwSaved")); }).catch(fail);
+$("pwInput").addEventListener("keydown", e => { if (e.key === "Enter") $("pwSet").click(); });
+$("rmLink").onclick = async () => {
+  if (!confirm(t("p.rmLinkAsk"))) return;
+  try { const p = await api("DELETE", `/api/puzzles/${st.id}/link`); st.link = p.link; drawLink(); loadPuzzles(); } catch (e) { fail(e); }
+};
+$("cpy").onclick = () => copyText(linkUrl());
+$("waBtn").onclick = () => {
+  const title = webTitle();
+  window.open("https://wa.me/?text=" + encodeURIComponent(t("p.waText", { title }) + "\n" + linkUrl()), "_blank", "noopener");
+};
+async function loadShareSetup() { await loadShares(); drawSettings(); }
+
+// ---------- P9 Geteilte Puzzles, P10 Details eines Links ----------
+let shares = null, shareFilterValue = "all", shareDetailId = null;
+const SHARE_DAYS = [["today", "sh.today"], ["1", "sh.tomorrow"], ["7", "sh.d7"], ["30", "sh.d30"], ["60", "sh.d60"], ["90", "sh.d90"], ["365", "sh.y1"], ["0", "sh.unlimitedOpt"], ["until", "sh.untilDate"]];
+const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const shareLive = s => !s.expired && s.active !== false;  // «Aktiv» ohne ausgeschaltete (Entscheid 48)
+function shareValidity(s) {
+  if (s.expired) return t("sh.expiredOn", { date: fmtDate(s.expires_at * 1000) });
+  if (s.active === false) return t("sh.off");
+  if (s.pending) return t("sh.from", { date: fmtDate(s.valid_from * 1000) });
+  if (!s.expires_at) return t("sh.unlimited");
+  const end = new Date(s.expires_at * 1000), now = new Date();  // Kalendertage bis zum Ablauftag (Ablauf am Tagesende)
+  const days = Math.round((new Date(end.getFullYear(), end.getMonth(), end.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  return days <= 0 ? t("sh.lastDay") : t("sh.left", { n: days, date: fmtDate(s.expires_at * 1000) });
+}
+function shareViews(s) {
+  if (!s.views) return t("sh.noViews");
+  return t("sh.views", { n: s.views, date: fmtDate(s.last_viewed_at * 1000, { dateStyle: "medium", timeStyle: "short" }) });
+}
+function shareFacts(s) {
+  return [t("sh.created", { date: fmtDate(s.created_at * 1000) }), shareValidity(s), shareViews(s),
+          ...(s.protected ? [t("sh.protected")] : []), ...(s.download ? [t("sh.download")] : []), ...(s.metadata === false ? [t("sh.noMeta")] : [])];
+}
+const factEl = text => el("span", "shareFacts", text);
+function daysBody(value, until) {  // Wert der Auswahl → Body für den Link, null wenn das Datum fehlt
+  if (value === "until") return until ? { until } : null;
+  return { days: value === "today" ? "today" : +value };
+}
+function daysSelect(sel, first) {
+  sel.replaceChildren(...(first ? [new Option(first, "")] : []), ...SHARE_DAYS.map(([v, key]) => new Option(t(key), v)));
+}
+async function shareCall(id, method, body) {  // Ändern oder löschen, danach Liste und (falls offen) den Editor nachführen
+  const p = await api(method, `/api/puzzles/${id}/link`, body || {});
+  if (st.id === id) { st.link = p.link; drawLink(); }
+  await loadPuzzles();
+  return p;
+}
+function copyText(text) { navigator.clipboard.writeText(text).then(() => toast(t("p.copied")), () => toast(text)); }
+function drawSharesSum() {
+  if (!shares) return;
+  const active = shares.filter(s => !s.expired), views = active.reduce((sum, s) => sum + s.views, 0);
+  $("sharesSum").textContent = !st.share.enabled && !shares.length ? t("p.shareOff")
+    : !shares.length ? t("sh.noneSum") : t("sh.sum", { n: active.length, views: t("sh.viewsSum", { n: views }) });
+}
+function shareRow(s) {
+  const row = el("div", "shareRow" + (s.expired ? " expired" : "") + (s.active === false ? " off" : "") + (s.id === shareDetailId && shown.includes("P10") ? " on" : ""));
+  row.dataset.id = s.id;
+  const thumb = el("img"); thumb.alt = ""; thumb.loading = "lazy"; thumb.src = s.thumb;
+  thumb.addEventListener("error", () => thumb.remove());
+  const main = el("div", "shareMain"), head = el("div", "shareTitle");
+  const title = el("strong", "", s.title);
+  if (s.own_title && s.name && s.name !== s.title) title.title = t("sh.ofPuzzle", { name: s.name });
+  const cpy = $("shCopy").cloneNode(true); cpy.removeAttribute("id"); cpy.onclick = () => copyText(s.url || s.path);
+  const det = el("button", "paneBtn mkDetail", ">"); det.type = "button"; det.title = t("sh.details");
+  det.setAttribute("aria-label", t("sh.details") + ": " + s.title);
+  det.setAttribute("aria-pressed", String(s.id === shareDetailId && shown.includes("P10")));
+  det.onclick = () => { if (shareDetailId === s.id && shown.includes("P10")) go("CLOSE", $("sideShare")); else { shareDetailId = s.id; go("P10"); drawShareDetail(); drawShares(); } };
+  head.append(title, cpy, det);
+  // Schalter «Aktiv» (Entscheid 48): aus = die Adresse bleibt, zeigt aber nur «Link nicht aktiv»
+  const activeRow = el("label", "shareActive");
+  const sw = el("input", "sw"); sw.type = "checkbox"; sw.setAttribute("role", "switch");
+  sw.checked = s.active !== false; sw.disabled = s.expired;
+  sw.onchange = () => { sw.disabled = true; shareCall(s.id, "POST", { active: sw.checked }).catch(e => { fail(e); drawShares(); }); };
+  activeRow.append(sw, document.createTextNode(t("p.active")));
+  const actions = el("div", "shareActions");
+  const open = el("button", "", t("sh.openLink")); open.type = "button";
+  open.disabled = s.expired || !s.url || s.active === false;
+  if (!s.url) open.title = t("sh.noUrl");
+  open.onclick = () => window.open(s.url, "_blank", "noopener");
+  const days = el("select"); days.setAttribute("aria-label", t("sh.changeDays")); daysSelect(days, t("sh.changeDays"));
+  const until = el("input", "hidden"); until.type = "date"; until.setAttribute("aria-label", t("sh.untilLabel"));
+  const changeDays = () => { const body = daysBody(days.value, until.value); if (body) shareCall(s.id, "POST", body).catch(e => { fail(e); drawShares(); }); };
+  days.onchange = () => {
+    if (days.value === "") return;
+    if (days.value === "until") { until.min = isoToday(); until.classList.remove("hidden"); until.focus(); return; }
+    changeDays();
+  };
+  until.onchange = () => { if (until.value) changeDays(); };
+  const del = el("button", "", t("sh.delete")); del.type = "button";
+  del.onclick = () => deleteShare(s);
+  actions.append(open, days, until, del);
+  main.append(head, ...shareFacts(s).map(factEl), activeRow, actions);
+  row.append(thumb, main);
+  return row;
+}
+async function deleteShare(s) {
+  if (!confirm(t("sh.delConfirm", { title: s.title }))) return;
+  try { await shareCall(s.id, "DELETE"); if (shareDetailId === s.id && shown.includes("P10")) go("CLOSE", $("sideShare")); } catch (e) { fail(e); }
+}
+function drawShares() {
+  drawSharesSum(); drawWelcome();
+  if (!shares) { $("shareList").replaceChildren(factEl(t("src.loading"))); return; }
+  const counts = { active: shares.filter(shareLive).length, expired: shares.filter(s => s.expired).length, all: shares.length };
+  document.querySelectorAll("#shareFilter button").forEach(b => {
+    b.textContent = `${t({ active: "sh.active", expired: "sh.expired", all: "sh.all" }[b.dataset.filter])} (${counts[b.dataset.filter]})`;
+    b.classList.toggle("on", b.dataset.filter === shareFilterValue);
+    b.setAttribute("aria-pressed", String(b.dataset.filter === shareFilterValue));
+  });
+  $("sharesPurge").classList.toggle("hidden", !counts.expired);
+  const list = shares.filter(s => shareFilterValue === "all" || (shareFilterValue === "expired" ? s.expired : shareLive(s)));
+  if (!list.length) {
+    const p = el("p", "muted"); p.style.margin = "0";
+    p.textContent = !shares.length ? (st.share.enabled ? t("sh.empty") : t("p.shareOff"))
+      : t(shareFilterValue === "expired" ? "sh.noneExpired" : "sh.noneActive");
+    $("shareList").replaceChildren(p);
+  } else $("shareList").replaceChildren(...list.map(shareRow));
+  drawShareDetail();
+}
+async function loadShares() {
+  try {
+    const r = await api("GET", "/api/shares");
+    shares = r.shares; delete r.shares; about.share = r;
+    st.share = { enabled: r.enabled, url: r.url, prefix: r.prefix };
+  } catch (e) { fail(e); }
+  drawShares(); drawState();
+}
+document.querySelectorAll("#shareFilter button").forEach(b => b.addEventListener("click", () => { shareFilterValue = b.dataset.filter; drawShares(); }));
+$("sharesPurge").onclick = async () => {
+  const n = (shares || []).filter(s => s.expired).length;
+  if (!n || !confirm(t("sh.purgeConfirm", { n }))) return;
+  try {
+    await api("DELETE", "/api/shares/expired");
+    if (st.id && st.link && st.link.expired) { st.link = (await api("GET", `/api/puzzles/${st.id}`)).link; drawLink(); }
+    await loadPuzzles();
+  } catch (e) { fail(e); }
+};
+function drawShareDetail() {
+  if (!shareDetailId || !shares) return;
+  const s = shares.find(x => x.id === shareDetailId);
+  if (!s) { if (shown.includes("P10")) go("CLOSE", $("sideShare")); return; }
+  $("shDetailTitle").textContent = s.title;
+  $("shDetailThumb").src = s.thumb;
+  if (document.activeElement !== $("shWebTitle")) $("shWebTitle").value = s.own_title ? s.title : "";
+  $("shWebTitle").placeholder = s.name || "";
+  $("shUrl").textContent = s.url || s.path;
+  $("shFacts").replaceChildren(...shareFacts(s).map(factEl));
+  $("shActive").checked = s.active !== false; $("shActive").disabled = s.expired;
+  $("shPw").checked = s.protected || !$("shPwRow").classList.contains("hidden");
+  $("shDl").checked = s.download; $("shMeta").checked = s.metadata !== false;
+  daysSelect($("shDays"));
+  const days = s.expired ? "" : s.days === "until" ? "until" : String(s.days ?? 0);
+  $("shDays").value = days;
+  if (days === "until" && s.expires_at) { const d = new Date(s.expires_at * 1000); $("shUntil").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; $("shUntil").classList.remove("hidden"); }
+  $("shOpen").disabled = s.expired || !s.url || s.active === false;
+  $("shOpen").title = s.url ? "" : t("sh.noUrl");
+}
+const detail = () => shares && shares.find(x => x.id === shareDetailId);
+const detailCall = body => { const s = detail(); return s ? shareCall(s.id, "POST", body).catch(e => { fail(e); drawShareDetail(); }) : Promise.resolve(); };
+$("shCopy").onclick = () => { const s = detail(); if (s) copyText(s.url || s.path); };
+$("shWebTitle").onchange = e => detailCall({ title: e.target.value.trim() });  // Leer = wieder der Name des Puzzles
+$("shActive").onchange = e => detailCall({ active: e.target.checked });
+$("shDl").onchange = e => detailCall({ download: e.target.checked });
+$("shMeta").onchange = e => detailCall({ metadata: e.target.checked });
+$("shDays").onchange = e => {
+  if (e.target.value === "until") { $("shUntil").min = isoToday(); $("shUntil").classList.remove("hidden"); $("shUntil").focus(); return; }
+  $("shUntil").classList.add("hidden");
+  if (e.target.value !== "") detailCall(daysBody(e.target.value));
+};
+$("shUntil").onchange = e => { if (e.target.value) detailCall({ until: e.target.value }); };
+$("shPw").onchange = e => {
+  if (e.target.checked) { $("shPwRow").classList.remove("hidden"); $("shPwInput").focus(); return; }
+  $("shPwRow").classList.add("hidden");
+  const s = detail();
+  if (s && s.protected) detailCall({ password: null }).then(() => toast(t("p.pwRemoved")));
+};
+$("shPwSet").onclick = () => {
+  const s = detail(); if (!s) return;
+  shareCall(s.id, "POST", { password: $("shPwInput").value }).then(() => { $("shPwInput").value = ""; $("shPwRow").classList.add("hidden"); toast(t("p.pwSaved")); }).catch(fail);
+};
+$("shPwInput").addEventListener("keydown", e => { if (e.key === "Enter") $("shPwSet").click(); });
+$("shOpen").onclick = () => { const s = detail(); if (s && s.url) window.open(s.url, "_blank", "noopener"); };
+$("shEdit").onclick = async () => { const s = detail(); if (s) { await openPuzzle(s.id); go("HOME"); } };
+$("shDel").onclick = () => { const s = detail(); if (s) deleteShare(s); };
+about.onChangelog = () => go(about.changelogOpen ? "CLOSE" : "P13", $("sideChangelog"));
+about.saveShareUrl = async url => {  // Einstellung «Adresse der Live-Links»
+  about.share = await api("POST", "/api/shares/url", { url });
+  drawSettings();
+  toast(t("p.saved")); loadShares();
+  if (st.id && st.link) { try { st.link = (await api("GET", `/api/puzzles/${st.id}`)).link; drawLink(); } catch {} }
+};
+
+// ---------- P28 Willkommen ----------
+let appVersion = null;
+function drawWelcome() {
+  $("hmTPz").textContent = fmt(st.puzzles.length);
+  const live = (shares || []).filter(shareLive);
+  $("hmTLinks").textContent = fmt(live.length);
+  $("hmTViews").textContent = fmt((shares || []).reduce((sum, s) => sum + (s.views || 0), 0));
+  $("hmTMusic").textContent = fmt(st.tracks.filter(x => x.own).length);
+  const ev = [...st.puzzles.map(p => [p.updated, t("u.logPuzzle", { name: p.name })]),
+              ...(shares || []).map(s => [s.created_at, t("u.logLink", { name: s.title })])]
+    .filter(x => x[0]).sort((a, b) => b[0] - a[0]).slice(0, 5);
+  $("hmLog").replaceChildren(...(ev.length ? ev.map(([ts, text]) => { const li = el("li"); li.append(el("span", "t", fmtDate(ts * 1000, { dateStyle: "medium", timeStyle: "short" })), el("span", "", text)); return li; })
+    : [el("li", "muted", t("u.logNone"))]));
+  $("hmVer").textContent = appVersion ? `${t("about.version")} ${appVersion.version}` : "";
+}
+fetch("/api/version").then(r => r.json()).then(v => { appVersion = v; drawWelcome(); drawMotifSources(); }).catch(() => {});
+// Ohne Immich (IMMICH_URL und IMMICH_API_KEY leer) bleibt im Schritt Motiv nur «Hochladen»
+function drawMotifSources() {
+  const off = appVersion && appVersion.immich === false;
+  $("imBtn").classList.toggle("hidden", off); $("mkDirect").classList.toggle("hidden", off);
+  $("uploadBtn").classList.toggle("primary", off);
+  $("mkNote").dataset.i18n = off ? "u.motifNoteUp" : "u.motifNote"; $("mkNote").textContent = t($("mkNote").dataset.i18n);
+}
+
+// ---------- Familien-Umschalter (Entscheid 21, wie Collage): andere Immich-Dienste aus family.json ----------
+let family = { self: null, services: [], openMode: "same" };
+async function loadFamily() {
+  try { family = await (await fetch("/api/family")).json(); } catch { family = null; }
+  if (!family || !Array.isArray(family.services)) family = { self: null, services: [], openMode: "same" };
+  $("familyBtn").classList.toggle("hidden", !family.services.length);
+  drawFamily();
+}
+// Entscheid 44: wie ein anderer Dienst aufgeht (openMode aus Smart Albums); Strg/Cmd/Shift/Mittelklick macht der Browser
+const OPEN_FEATURES = { tab: "noopener", window: "noopener,popup,width=1280,height=860" };
+function openService(event, url) {
+  const features = OPEN_FEATURES[family.openMode];
+  if (!features || event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  window.open(url, "_blank", features);
+}
+function drawFamily() {
+  $("familyNone").classList.toggle("hidden", family.services.length > 0);
+  $("familyList").replaceChildren(...family.services.map(s => {
+    const own = s.id === family.self;
+    const row = el(own ? "div" : "a", "famRow" + (own ? " on" : ""));
+    if (!own) { row.href = s.url + s.new_path; row.addEventListener("click", event => openService(event, row.href)); }
+    const icon = el("span", "famIcon");
+    const letter = el("span", "famLetter", (s.name.replace(/^immich\s+/i, "")[0] || "?").toUpperCase()); letter.hidden = true;
+    for (const mode of ["light", "dark"]) {
+      const img = el("img", mode === "light" ? "logoLight" : "logoDark"); img.alt = "";
+      img.src = `${s.url}/brand/icon-${s.id}-${mode}.svg`;
+      img.addEventListener("error", () => { icon.querySelectorAll("img").forEach(i => i.remove()); letter.hidden = false; });
+      icon.append(img);
+    }
+    icon.append(letter);
+    const text = el("span", "famText");
+    text.append(el("strong", "", s.name));
+    if (s.claim) { const sub = el("span", "famSub", s.claim); sub.lang = "en"; text.append(sub); }
+    const end = el("span");
+    if (own) { end.className = "famHere"; end.textContent = t("family.here"); row.setAttribute("aria-current", "page"); }
+    else { end.className = "famGo"; end.setAttribute("aria-hidden", "true"); end.textContent = "›"; }
+    row.append(icon, text, end);
+    return row;
+  }));
+}
+loadFamily();
+
+// ---------- Panels: Stapel von links nach rechts (Mockup P2 … P28) ----------
+// Ein Ziel mit Eltern-Panel hängt sich an dessen Kette, sonst ersetzt es den Stapel. Ist der Stapel leer, steht rechts
+// die Vorschau (mit Motiv) oder die Willkommensseite. Die Vorschau steht nur, solange kein Panel der zweiten Ebene offen ist
+// (Roger 21.11.2026, 0.1.4).
+const PARENT = { P10: "P9", P13: "P12", P23: "P22", P24: "P2", P25: "P24" };
+const ALIAS = { history: "P22", shares: "P9", share: "P10", settings: "P11", about: "P12", changelog: "P13", other: "P21" };
+let stack = [], shown = [], homeY = 0;
+const panelOf = id => document.querySelector(`.mkP[data-pno="${id}"]`);
+const ENTER = {
+  P9: () => { drawShares(); loadShares(); },
+  P10: () => { $("shPwRow").classList.add("hidden"); $("shPwInput").value = ""; $("shUntil").classList.add("hidden"); drawShareDetail(); drawShares(); },
+  P11: () => { drawSettings(); loadShareSetup(); },
+  P12: () => drawImmichStatus(),
+  P13: () => { about.changelogOpen = true; drawChangelog(); drawAbout(); },
+  P24: () => loadSources(),
+  P19: () => openCrop(),
+  P5: () => drawTextPanel(),
+  P4: () => { st.visited.P4 = true; drawSteps(); drawTempo(); },
+  P3: () => { st.visited.P3 = true; drawSteps(); },
+  P8: () => { if (P.cfg) { P.resize(); drawChart(); } },
+  P22: () => drawPuzzles(),
+  P28: () => drawWelcome(),
+};
+const LEAVE = {
+  P13: () => { about.changelogOpen = false; drawAbout(); },
+  P10: () => drawShares(),
+  P23: () => { dClear(); puzzleDetailId = null; drawPuzzles(); },
+  P19: () => { draft = null; },
+  P8: () => pausePreview(),
+};
+function go(target, from) {
+  target = ALIAS[target] || target;
+  const oldStack = stack.slice();
+  if (target === "P19" && !st.img) { toast(t("p.needMotif")); target = "P2"; }
+  if (target === "HOME") stack = [];
+  else if (target === "CLOSE") {
+    const p = from && from.closest ? from.closest(".mkP") : null, i = p ? stack.indexOf(p.dataset.pno) : -1;
+    stack = i >= 0 ? stack.slice(0, i) : p && (p.dataset.pno === "P8" || p.dataset.pno === "P28") ? [] : stack.slice(0, -1);
+  } else {
+    const chain = []; for (let x = target; x; x = PARENT[x]) chain.unshift(x);
+    const i = stack.indexOf(target);
+    if (i >= 0) stack = stack.slice(0, i + 1);
+    else {
+      let k = chain.length - 2; while (k >= 0 && !stack.includes(chain[k])) k--;
+      stack = k >= 0 ? stack.slice(0, stack.indexOf(chain[k]) + 1).concat(chain.slice(k + 1)) : chain;
+    }
+  }
+  slide(oldStack, target, from);
+  drawPanels();
+}
+// Handy: Panels gleiten seitwärts (Roger 21.11.2026, 0.1.6)
+let slideIn = null;
+function slide(oldStack, target, from) {
+  if (!matchMedia("(max-width:860px)").matches) return;
+  const oldTop = oldStack[oldStack.length - 1], newTop = stack[stack.length - 1];
+  if (oldTop === newTop) return;
+  const back = target === "CLOSE" || target === "HOME" || oldStack.includes(target) || !!(from && from.classList && from.classList.contains("stepPrev"));
+  if (oldTop) {
+    const p = panelOf(oldTop); p.style.top = p.getBoundingClientRect().top + "px";
+    p.classList.remove("pzIn", "fromL"); p.classList.add("pzLeave"); p.classList.toggle("toL", !back);
+    setTimeout(() => { p.classList.remove("pzLeave", "toL"); p.style.top = ""; }, 300);
+  }
+  slideIn = newTop ? { id: newTop, back } : null;
+}
+// Schritt-Panels: unten «‹ Vorheriger · Nächster › · Fertig» (Roger 21.11.2026, 0.1.6); Motiv bearbeiten behält Abbrechen/Übernehmen
+const STEP_ORDER = ["P2", "P19", "P26", "P3", "P4", "P5", "P8", "P7"];
+function stepNav() {
+  STEP_ORDER.forEach((id, i) => {
+    const row = id === "P19" ? null : panelOf(id).querySelector(":scope > .doneRow");
+    if (!row) return;
+    let prev = row.querySelector(".stepPrev"), next = row.querySelector(".stepNext");
+    if (!prev) {
+      prev = document.createElement("button"); prev.type = "button"; prev.className = "stepPrev";
+      next = document.createElement("button"); next.type = "button"; next.className = "stepNext";
+      row.prepend(prev); prev.after(next); row.classList.add("stepRow");
+    }
+    [[prev, STEP_ORDER[i - 1], "pane.prev"], [next, STEP_ORDER[i + 1], "pane.next"]].forEach(([b, to, key]) => {
+      b.classList.toggle("invisible", !to);
+      if (!to) { delete b.dataset.go; return; }
+      b.dataset.go = to; b.innerHTML = ""; const lg = document.createElement("span"); lg.className = "lg"; lg.textContent = t(key);
+      const sm = document.createElement("span"); sm.className = "sm"; sm.textContent = key === "pane.prev" ? "«" : "»"; b.append(lg, sm);
+      b.title = t(key + "T", { step: crumbLabel(to) }); b.setAttribute("aria-label", b.title);
+    });
+  });
+}
+function crumbLabel(id) {
+  const h = panelOf(id).querySelector(".paneHead h2");
+  if (!h) return id;
+  const t = h.querySelector("[data-i18n]:not(.num):not(.tick)");
+  return ((t || h).textContent || "").replace(/^\d+\s*/, "").replace(/\s*✓\s*$/, "").trim() || id;
+}
+function drawPanels() {
+  const y0 = scrollY;  // vor dem Umschalten lesen: ein eingeblendetes Panel verschiebt sonst die Scrollposition
+  const next = stack.slice();
+  // Handy: Vorschau nicht als Kasten auf der Startseite, sie öffnet über «8 Vorschau ›» als ganzer Bildschirm (Roger 21.11.2026, 0.1.6)
+  if (!stack.length && !(st.img && matchMedia("(max-width:860px)").matches)) next.push(st.img ? "P8" : "P28");
+  const before = shown; shown = next;
+  for (const id of before) if (!shown.includes(id) && LEAVE[id]) LEAVE[id]();
+  const top = stack[stack.length - 1];
+  document.querySelectorAll(".mkP").forEach(p => {
+    const i = shown.indexOf(p.dataset.pno);
+    p.classList.toggle("on", i >= 0); p.style.order = i >= 0 ? String(i + 1) : "";
+    p.classList.toggle("top", !!top && p.dataset.pno === top);
+  });
+  // Handy: Panel als ganzer Bildschirm unter der Kopfzeile. Vorher nach oben scrollen, sonst liegt die Kopfzeile
+  // ausserhalb und die Seite schaut oberhalb des Panels durch (wirkte wie ein Popup, Roger 21.11.2026, 0.1.6)
+  const wasDeep = document.body.classList.contains("deep"), deep = stack.length > 0, phone = matchMedia("(max-width:860px)").matches;
+  // iPhone: overflow:hidden hält die Seite nicht fest, der Hintergrund scrollte mit. Darum die Seite an ihrer Stelle fixieren
+  // und beim Schliessen dorthin zurück (Roger 21.11.2026, 0.1.6)
+  const bs = document.body.style;
+  if (phone && deep && !wasDeep) { homeY = y0; bs.position = "fixed"; bs.left = bs.right = "0"; bs.top = -homeY + "px"; }
+  document.body.classList.toggle("deep", deep);
+  if (!deep && wasDeep && bs.position === "fixed") { bs.position = bs.left = bs.right = bs.top = ""; scrollTo(0, homeY); }
+  stepNav();
+  if (slideIn) {
+    const p = panelOf(slideIn.id); p.classList.remove("pzIn", "fromL"); void p.offsetWidth;
+    p.classList.add("pzIn"); p.classList.toggle("fromL", slideIn.back); slideIn = null;
+    setTimeout(() => p.classList.remove("pzIn", "fromL"), 300);
+  }
+  document.querySelectorAll(".paneBtn[data-go]").forEach(b => { const on = stack.includes(b.dataset.go); b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+  $("familyBtn").classList.toggle("on", stack.includes("P21")); $("familyBtn").setAttribute("aria-pressed", String(stack.includes("P21")));
+  for (const id of shown) if (!before.includes(id) && ENTER[id]) ENTER[id]();
+  drawCrumbs([{ id: "HOME", label: "Puzzle" }, ...stack.map(id => ({ id, label: crumbLabel(id) }))], id => go(id));
+  setBarH(); setPaneTop();
+  if (top && !matchMedia("(max-width:860px)").matches) { const p = panelOf(top); requestAnimationFrame(() => p.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })); }
+}
+function setBarH() { const h = document.querySelector("header"); document.documentElement.style.setProperty("--barH", (document.body.classList.contains("deep") ? h.offsetHeight : h.offsetTop + h.offsetHeight) + "px"); }
+/* Panels mitlaufend: oben unter der Kopfzeile, nach dem Scrollen 16px vom Rand, unten immer bündig (wie Collage) */
+function setPaneTop() { const h = document.querySelector("header"); document.documentElement.style.setProperty("--paneTop", Math.max(16, Math.round(h.getBoundingClientRect().bottom) + 16) + "px"); }
+addEventListener("scroll", setPaneTop, { passive: true }); addEventListener("resize", setPaneTop); setPaneTop();
+// Kopfzeile ändert ihre Höhe (Pfad «Puzzle > Teilen», Laden, Umbruch): dann Höhen neu rechnen, sonst endet das Panel zu früh oder zu spät
+if (window.ResizeObserver) new ResizeObserver(() => { setBarH(); setPaneTop(); }).observe(document.querySelector("header"), { box: "border-box" });
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-go]"); if (!b) return;
+  e.preventDefault();
+  const target = ALIAS[b.dataset.go] || b.dataset.go;
+  if (b.classList.contains("paneBtn") && stack[stack.length - 1] === target) go("CLOSE", panelOf(target));  // «>» nochmals: zu
+  else if (b.id === "familyBtn" && stack.includes("P21")) go("HOME");
+  else go(target, b);
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || !stack.length || (e.target.closest && e.target.closest("input,textarea,select"))) return;
+  go("CLOSE", panelOf(stack[stack.length - 1]));
+});
+
+// ---------- Start ----------
+let wasPhone = matchMedia("(max-width:860px)").matches;  // Handy ↔ Computer: Startseite mit oder ohne Vorschau
+window.addEventListener("resize", () => { setBarH(); const ph = matchMedia("(max-width:860px)").matches; if (ph !== wasPhone) { wasPhone = ph; drawPanels(); } if (P.cfg && shown.includes("P8")) { P.resize(); drawChart(); } if (shown.includes("P5")) drawTextPanel(); });
+onLang(() => { drawControls(); drawInfo(); drawPuzzles(); drawFamily(); drawState(); if (st.link) drawLink(); drawChart(); drawSources(); if (shares) drawShares(); drawWelcome(); drawPanels(); if (shown.includes("P19")) drawCrop(); if (shown.includes("P4")) drawTempo(); });
+applyI18n();
+resetEditor();
+drawPanels();
+(async () => {
+  await Promise.all([loadPuzzles(), loadTracks()]);
+  const id = new URLSearchParams(location.search).get("id");
+  if (id) { await openPuzzle(id); drawPanels(); }
+})();
+</script>
+</body>
+</html>

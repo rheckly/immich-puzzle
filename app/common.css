@@ -1,0 +1,143 @@
+/* Gemeinsam für die Marken (aus Collage übernommen): Boxen, Panels, Pfad oben und die Wahl von Alben und Personen.
+   Steht vor dem Stil der Seite, die Seite kann also noch etwas anpassen. */
+/* Kopf: [Logo] Immich Mosaik  Prozess > …, rechts nur der Profil-Kreis #profile (profile.js) mit Darstellung und Sprache
+   im Menü (Familienregel, Entscheid 20). Auf schmalen Bildschirmen steht der Pfad in einer eigenen Zeile */
+/* iPhone: Safari zoomt in jedes Feld mit weniger als 16 px Schrift und bleibt dann vergrössert.
+   Darum auf Touch-Geräten 16 px, und die Schrift wird beim Drehen nicht von selbst grösser. */
+html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+@media (pointer:coarse) { input, select, textarea { font-size:16px !important; } }
+#kindBox { padding:10px 14px; }
+#kindBox h2 { font-size:inherit; font-weight:600; margin:0 0 8px; }
+#kindNav { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+#kindNav a { flex:1; text-align:center; padding:8px 12px; text-decoration:none; color:inherit; background:var(--bg); font-size:15px; }
+#kindNav .on { background:var(--accent); color:var(--on-accent); font-weight:600; }
+/* Reiter wie Mosaik | Collage, zum Beispiel Hintergrundfarbe | Hintergrundbild */
+.tabs { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; margin:0 0 12px; }
+.tabs button { flex:1; border:0; border-radius:0; margin:0; padding:8px 12px; background:var(--bg); color:inherit; font-size:15px; }
+.tabs button[aria-selected="true"] { background:var(--accent); color:var(--on-accent); font-weight:600; }
+#kindBox .btnRow { margin-top:10px; }
+
+/* Was neben den Panels keinen Platz hat, verschwindet links (fitColumns) */
+@media (min-width:861px) { .offLeft { display:none !important; } }
+#crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:2px 6px; flex:1 1 0; min-width:0; font-size:13px; }
+@media (max-width:600px) { #crumbs { order:1; flex-basis:100%; } }
+#crumbs button { padding:2px 6px; background:none; border:0; color:inherit; text-decoration:underline; cursor:pointer; }
+#crumbs .sep { padding:2px 0; opacity:.6; }
+#crumbs .now { padding:2px 6px; font-weight:600; }
+
+/* Panel «Über», gleich wie in Face-Timelapse: Abschnitte mit Linie, Tabelle Beschriftung | Wert, Punkt grün/gelb/rot für Immich */
+.aboutName { margin:0; font-size:16px; font-weight:bold; }
+.paneSection { margin:18px 0 8px; padding-top:12px; border-top:1px solid var(--line); font-size:15px; }
+.aboutTable { border-collapse:collapse; font-size:14px; }
+.aboutTable th { text-align:left; font-weight:normal; color:var(--muted); padding:3px 16px 3px 0; vertical-align:top; }
+.aboutTable td { padding:3px 0; overflow-wrap:anywhere; }
+/* Changelog (Entscheid 43): Box zuunterst in «Über», Panel rechts davon. Farben der Typen wie Reels (Changelog.svelte) */
+.clBox { margin-top:18px; padding-top:12px; border-top:1px solid var(--line); }
+.clBoxHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.clBoxHead h3 { margin:0; font-size:15px; }
+.clBox p { margin:4px 0 0; font-size:14px; }
+.clType-NEW { --cl:#2e7d32; } .clType-CHG { --cl:#2f6f8f; } .clType-FIX { --cl:#b45309; } .clType-LNG { --cl:#7b4ea3; }
+.clIntro { margin:0 0 10px; font-size:13px; }
+.clBar { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin-bottom:6px; }
+.clRelease { display:flex; align-items:center; gap:8px; margin:0; font-size:14px; }
+.clRelease select { width:auto; }
+.clChips { display:flex; flex-wrap:wrap; gap:6px; }
+.clChip { padding:1px 10px; border:1px solid var(--cl); border-radius:999px; background:transparent; color:var(--cl); font-size:12px; font-weight:700; letter-spacing:.03em; }
+.clChip.on { background:var(--cl); color:#fff; }
+.clCount { font-weight:400; opacity:.85; }
+.clRel { margin-top:14px; }
+.clRelHead { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin:0 0 6px; padding-bottom:4px; border-bottom:1px solid var(--line); font-size:15px; }
+.clRelHead .muted { font-size:13px; font-weight:normal; }
+.clNote { margin:0 0 6px; font-size:13px; }
+.clList { margin:0; padding:0; list-style:none; font-size:14px; }
+.clList > li { display:flex; align-items:baseline; gap:8px; margin:5px 0; }
+.clBadge { flex:none; width:36px; padding:1px 0; border-radius:4px; background:var(--cl); color:#fff; font-size:10px; font-weight:700; letter-spacing:.03em; text-align:center; }
+.clBadge.clNone { background:none; }
+.clText { min-width:0; overflow-wrap:anywhere; }
+.clText code { font-size:12px; }
+.clSub { margin:4px 0 0; padding-left:18px; }
+.immichDot { display:inline-block; width:8px; height:8px; margin-right:6px; border-radius:50%; vertical-align:middle; background:#dc2626; }
+.immichDot.dot-connected { background:#22c55e; }
+.immichDot.dot-checking { background:#f59e0b; }
+.immichDot.dot-off { background:#9ca3af; }
+
+section.box { padding:10px 14px; }
+.boxHead { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.boxTitle { flex:1; min-width:0; margin:0; }
+.boxTitle.fixed { padding:2px 0; font-size:inherit; font-weight:600; }
+.boxToggle { display:flex; width:100%; gap:8px; align-items:center; justify-content:space-between; padding:2px 0; background:none; border:0; font-weight:600; text-align:left; }
+.boxArrow { transition:transform .12s; }
+.box.closed .boxArrow { transform:rotate(-90deg); }
+.boxSum { flex-basis:100%; }
+.boxBody { margin-top:8px; }
+.box.closed .boxBody,.box:not(.closed) .boxSum { display:none; }
+.boxText { margin:0; font-size:13px; white-space:pre-line; overflow-wrap:anywhere; }
+.paneBtn { padding:1px 9px; font-weight:600; }
+.paneBtn.on { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+
+#paneHead { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+#paneTitle { margin:0; }
+#paneClose { margin-left:auto; padding:1px 10px; }
+.panel { display:flex; flex-direction:column; flex:1; min-height:0; overflow:auto; }
+/* Fertig unten in jedem Panel: bei kurzem Inhalt ganz unten, bei langem bleibt er beim Scrollen sichtbar */
+.btnRow.doneRow { position:sticky; bottom:0; z-index:2; margin-top:auto; padding-top:10px; background:var(--card); }
+
+/* Alben, Personen und Geteilt mit */
+#srcTabs button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+#panelSource { overflow:hidden; }
+#srcList { display:flex; flex-direction:column; flex:1; min-height:0; }
+#srcList > #srcSearch { flex:none; }
+#srcTableWrap { flex:1; min-height:0; overflow:auto; margin-top:8px; border:1px solid var(--line); border-radius:5px; }
+#srcTable { width:100%; border-collapse:collapse; font-size:13px; }
+#srcTable th { position:sticky; top:0; z-index:1; background:var(--card); text-align:left; border-bottom:1px solid var(--line); padding:0; }
+#srcTable th.num,#srcTable td.num { text-align:right; }
+#srcTable td { padding:4px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+#srcTable td:first-child { width:100%; white-space:normal; }
+#srcTable tr[data-id] { cursor:pointer; }
+#srcTable label.check { margin:0; color:var(--text); font-size:13px; cursor:pointer; }
+.sort { width:100%; padding:5px 8px; background:none; border:0; color:var(--muted); font-size:13px; text-align:inherit; white-space:nowrap; }
+.sort.on { color:var(--text); font-weight:600; }
+.face { width:28px; height:28px; border-radius:50%; object-fit:cover; background:var(--bg); flex:none; }
+#srcPickedRows { display:flex; flex-direction:column; gap:4px; }
+#srcPicked.off { opacity:.5; }
+.pickedRow { display:flex; gap:8px; align-items:center; padding:3px 4px 3px 8px; background:var(--bg); border:1px solid var(--line); border-radius:5px; font-size:13px; }
+.pickedRow span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.pickedRow em { color:var(--err); font-style:normal; }
+.pickedRow button { padding:0 7px; }
+
+/* Speichern und teilen */
+.partHead { font-size:14px; margin:0 0 4px; }
+#shareSection { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+#shareChosen { display:flex; flex-direction:column; gap:4px; margin-top:6px; }
+#shareLinks { display:flex; flex-direction:column; gap:2px; margin-top:4px; font-size:13px; }
+#shareDlg { width:min(640px,96vw); max-height:88vh; padding:16px; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; }
+#shareDlg::backdrop { background:rgba(0,0,0,.6); }
+#shareDlg h2 { margin:0 0 8px; font-size:18px; }
+#sharePeople { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; max-height:min(50vh,360px); overflow:auto; padding:4px; margin:8px 0 12px; border:1px solid var(--line); border-radius:8px; }
+.personCard { padding:8px 6px; background:var(--bg); border:2px solid transparent; border-radius:8px; font-size:13px; overflow-wrap:anywhere; }
+.personCard[aria-pressed=true] { border-color:var(--accent); }
+.personCard small { display:block; color:var(--muted); font-size:11px; }
+.avatar { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; width:64px; height:64px; margin:0 auto 4px; border-radius:50%; color:#fff; font-size:23px; font-weight:600; }
+.avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+
+/* Logo und Titel als Link auf die Startseite (Design-Entscheid 6). Icon als SVG passend zum Theme (Entscheid 14) */
+a.brand { display:flex; align-items:center; gap:12px; color:var(--text); text-decoration:none; border-radius:7px; }
+a.brand:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.brand .logoLight, .brand .logoDark { width:30px; height:30px; display:block; }
+.brand .logoDark, :root[data-theme=dark] .brand .logoLight { display:none; }
+:root[data-theme=dark] .brand .logoDark { display:block; }
+.brand .brandText { display:flex; flex-direction:column; line-height:1.15; min-width:0; }
+.brand .brandTag { font-size:12px; color:var(--muted); white-space:nowrap; }
+@media (max-width:600px) { .brand .brandTag { display:none; } }
+/* 375px: Logo, Titel und Profil-Kreis passen in eine Zeile (:root, weil die Seiten header selbst setzen) */
+@media (max-width:420px) { :root header { gap:6px; } a.brand { gap:8px; } }
+
+/* Häkchen hinter erledigten Schritten (Entscheid 10), Abzeichen (Entscheid 3) und Gefahr-Knöpfe (Entscheid 4), wie Face-Timelapse */
+.boxTitle .tick { margin-left:6px; color:var(--ok); font-weight:600; }
+.boxToggle .tick { margin-right:auto; }
+.boxTitle .tick[hidden] { display:none; }
+.badge { display:inline-block; padding:0 6px; border-radius:3px; font-size:11px; font-weight:600; line-height:1.6; background:var(--accent); color:var(--on-accent); vertical-align:middle; }
+.badge.run { background:var(--ok); color:var(--bg); }
+.badge.warn { background:none; border:1px solid var(--err); color:var(--err); }
+button.danger, .button.danger { color:var(--err); }
+.shareUrlForm input { width:100%; box-sizing:border-box; margin-top:4px; }

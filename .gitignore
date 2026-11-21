@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+.env
+docs/edda-screenshots/
+music/
+family/

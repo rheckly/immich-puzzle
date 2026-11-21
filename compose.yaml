@@ -1,0 +1,62 @@
+# Puzzle: photo puzzles from your Immich library.
+# Quick start: copy .env.example to .env, fill in IMMICH_URL and IMMICH_API_KEY (or leave both empty to work with
+# uploaded photos only), then `docker compose up -d`.
+# Everything else is optional; see README.md for the reverse proxy, login, music and the other options.
+services:
+  puzzle:
+    container_name: immich-puzzle
+    image: ghcr.io/rheckly/immich-puzzle:latest
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+      DATA_DIR: /data                                     # settings, puzzles, uploaded music, login state
+      MUSIC_DIR: /music                                   # read-only music library (optional, see volumes)
+      SHARE_PORT: "8081"                                  # second port that serves only the shared links
+      # Immich (optional: leave both empty and Puzzle works with uploaded photos only)
+      IMMICH_URL: ${IMMICH_URL:-}
+      IMMICH_API_KEY: ${IMMICH_API_KEY:-}
+      # Login: without LOGIN_PASSWORD everybody who reaches port 8080 can use the app and your Immich photos
+      LOGIN_USER: ${LOGIN_USER:-admin}
+      LOGIN_PASSWORD: ${LOGIN_PASSWORD:-}
+      LOGIN_NAME: ${LOGIN_NAME:-}
+      # Reverse proxy: IP(s) of your proxy as the container sees it, comma-separated
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # Shared links: public base address, e.g. https://links.example.com/puzzles
+      SHARE_PUBLIC_URL: ${SHARE_PUBLIC_URL:-}
+      # Optional: several Immich tools behind one login (see README, "Family")
+      FAMILY_ID: ${FAMILY_ID:-puzzle}
+      FAMILY_SECRET: ${FAMILY_SECRET:-}
+      FAMILY_COOKIE_DOMAIN: ${FAMILY_COOKIE_DOMAIN:-}
+      SHARES_API_KEY: ${SHARES_API_KEY:-}
+      # Optional: Umami statistics; leave empty to count nothing
+      UMAMI_URL: ${UMAMI_URL:-}
+      UMAMI_WEBSITE_ID: ${UMAMI_WEBSITE_ID:-}
+      UMAMI_LINKS_ID: ${UMAMI_LINKS_ID:-}
+    volumes:
+      - ./data:/data
+      - ${MUSIC_PATH:-./music}:/music:ro                  # MP3/M4A/OGG/WAV, one subfolder per playlist
+      # Optional family register and shared login lockout (see README, "Family"):
+      # - ./family:/family:ro
+      # - ./family/state:/family-state
+    ports:
+      - "${PUZZLE_PORT:-8080}:8080"                       # the app (put it behind your reverse proxy)
+      - "${PUZZLE_SHARE_PORT:-8081}:8081"                 # shared links only (public)
+    # Optional: if Immich runs in Docker on the same host, join its network and use
+    # IMMICH_URL=http://immich_server:2283. Uncomment both blocks and check the network name
+    # with `docker network ls`.
+    # networks:
+    #   - immich
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=4)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+# networks:
+#   immich:
+#     external: true
+#     name: immich_default
