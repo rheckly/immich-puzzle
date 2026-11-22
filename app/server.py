@@ -39,8 +39,8 @@ except ImportError:  # pragma: no cover
     mutagen = None
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSION = "0.1.6"  # bei jedem Build hochzählen, zuoberst in app/CHANGELOG.md gleich
-VERSION_DATE = "21.11.2026"
+VERSION = "0.1.7"  # bei jedem Build hochzählen, zuoberst in app/CHANGELOG.md gleich
+VERSION_DATE = "22.11.2026"
 
 
 # ---------- Changelog für das Panel «Über» (Entscheid 43) ----------

@@ -1,5 +1,9 @@
 # Changelog Puzzle
 
+## 0.1.7 – 2026-11-22
+- `CHG` `.env.example` läuft ohne Anpassung (nur Hochladen): `IMMICH_URL` ist leer, die Beispieladresse steht im Kommentar
+- `CHG` README: Abschnitt «Try it on your computer» mit Docker Desktop in vier Schritten (Dateien holen, `.env`, Start, Entfernen), auch für Windows (PowerShell); geteilte Puzzles unter `http://localhost:8081/puzzles/<Code>/`
+
 ## 0.1.6 – 2026-11-21
 - `FIX` Handy: Schritte öffnen als ganzer Bildschirm unter der Kopfzeile, auch wenn die Seite vorher nach unten gescrollt war (vorher schaute die Seite oberhalb durch, es wirkte wie ein Popup); beim Schliessen steht die Seite wieder an der alten Stelle
 - `NEW` Schritte 2–9: unten «‹ Vorheriger», «Nächster ›» und «Fertig»; «Motiv bearbeiten» behält «Abbrechen» und «Übernehmen»; auf dem Handy nur « und » als kurze Knöpfe, «Fertig» bekommt den Platz

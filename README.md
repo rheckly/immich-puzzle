@@ -78,6 +78,52 @@ Open `http://<your-host>:8080`. Puzzles, settings and uploaded music are stored 
 
 To update later: `docker compose pull && docker compose up -d`.
 
+### Try it on your computer (Docker Desktop)
+
+Four steps with Docker Desktop running. In Windows PowerShell write `curl.exe` (plain `curl` is something else
+there); on macOS and Linux `curl`.
+
+**1. Get the files**
+
+```powershell
+mkdir puzzle-test; cd puzzle-test
+```
+
+```powershell
+curl.exe -fsSLO https://raw.githubusercontent.com/rheckly/immich-puzzle/main/compose.yaml
+```
+
+```powershell
+curl.exe -fsSL -o .env https://raw.githubusercontent.com/rheckly/immich-puzzle/main/.env.example
+```
+
+**2. Adjust `.env` (optional)**
+
+As it comes, `.env` runs with uploads only and without login. For your Immich fill in `IMMICH_URL` and
+`IMMICH_API_KEY` (both, see step 3 above). To open shared puzzles straight from the app, set
+`SHARE_PUBLIC_URL=http://localhost:8081/puzzles`. Busy port: change `PUZZLE_PORT` / `PUZZLE_SHARE_PORT`.
+
+**3. Start**
+
+```powershell
+docker compose up -d
+```
+
+Docker pulls the image from ghcr.io. Open the app at `http://localhost:8080`. Shared puzzles play at
+`http://localhost:8081` followed by the path of the link, e.g. `http://localhost:8081/puzzles/<code>/`.
+
+**4. Remove it again**
+
+```powershell
+docker compose down
+```
+
+```powershell
+docker rmi ghcr.io/rheckly/immich-puzzle:latest
+```
+
+Then delete the folder `puzzle-test` (it also holds `data` and `music`).
+
 > [!WARNING]
 > **Security: without `LOGIN_PASSWORD` the app is open.** Everybody who reaches port 8080 can browse your Immich
 > albums, people and photos through Puzzle and create public links. Set `LOGIN_PASSWORD` (and `LOGIN_USER`) before
