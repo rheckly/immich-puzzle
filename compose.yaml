@@ -32,9 +32,13 @@ services:
       UMAMI_URL: ${UMAMI_URL:-}
       UMAMI_WEBSITE_ID: ${UMAMI_WEBSITE_ID:-}
       UMAMI_LINKS_ID: ${UMAMI_LINKS_ID:-}
+      # Optional: phone notifications via ntfy (crash restart, daily summary); leave NTFY_URL empty for none
+      NTFY_URL: ${NTFY_URL:-}                             # e.g. https://ntfy.example.com
+      NTFY_TOPIC: ${NTFY_TOPIC:-}                         # e.g. puzzle
+      NTFY_TOKEN: ${NTFY_TOKEN:-}                         # access token of a user that may only write to the topic
     volumes:
       - ./data:/data
-      - ${MUSIC_PATH:-./music}:/music:ro                  # MP3/M4A/OGG/WAV, one subfolder per playlist
+      - ${MUSIC_PATH:-./music}:/music:ro                 # MP3/M4A/OGG/WAV, one subfolder per playlist
       # Optional family register and shared login lockout (see README, "Family"):
       # - ./family:/family:ro
       # - ./family/state:/family-state
@@ -52,6 +56,36 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Optional: video download (MP4) of shared puzzles. Renders one video after another from ./data/render, without
+  # any network (no port, no internet). Switch it on in the app's settings; without this service the button never shows.
+  render:
+    container_name: immich-puzzle-render
+    image: ghcr.io/rheckly/immich-puzzle-render:latest
+    restart: unless-stopped
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpu_shares: 256                                       # lower priority than the app
+    depends_on:
+      puzzle:
+        condition: service_started                 # order only; the renderer creates missing folders itself
+    environment:
+      TZ: ${TZ:-UTC}
+      RENDER_SIZE: ${RENDER_SIZE:-1080}                   # short side in pixels (1080 = Full HD, 720 renders faster)
+    volumes:
+      - ./data/puzzles:/data/puzzles:ro
+      - ./data/music:/data/music:ro
+      - ./data/render:/data/render
+      - ${MUSIC_PATH:-./music}:/music:ro
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }

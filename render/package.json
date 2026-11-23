@@ -1,0 +1,10 @@
+{
+  "name": "immich-puzzle-render",
+  "private": true,
+  "description": "Renders shared puzzles as MP4 (headless, no browser). See render/README.md.",
+  "license": "MIT",
+  "main": "render.js",
+  "dependencies": {
+    "@napi-rs/canvas": "1.2.0"
+  }
+}

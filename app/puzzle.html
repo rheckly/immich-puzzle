@@ -29,10 +29,13 @@ button { font:inherit; padding:7px 13px; border-radius:5px; border:1px solid var
 button.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:600; }
 button.danger { color:var(--err); }
 button:disabled { opacity:.5; cursor:default; }
-input[type=text], input[type=password], input[type=search], select, textarea { width:100%; padding:6px 8px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:5px; font:inherit; }
+input[type=text], input[type=password], input[type=search], input[type=date], select, textarea { width:100%; padding:6px 8px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:5px; font:inherit; }
 textarea { resize:vertical; }
-select { min-height:2.3em; }
+select, input[type=date] { min-height:2.3em; }
 label.lbl { display:block; margin:8px 0 3px; font-size:13px; color:var(--muted); }
+/* D2: Gültig-bis-Datum unter der Auswahl; berechnet = gesperrt, aber gut lesbar */
+.validUntil, .validNone { margin-top:6px; }
+.validUntil:disabled { opacity:1; color:var(--text); background:transparent; border-style:dashed; }
 .muted { color:var(--muted); font-size:13px; }
 .error { color:var(--err); font-size:13px; }
 .hidden { display:none !important; }
@@ -54,6 +57,12 @@ button.cpy { padding:3px 6px; line-height:0; vertical-align:middle; }
 header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); }
 header h1 { margin:0; font-size:18px; }
 section.box { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:14px; }
+/* Ganze Box öffnet ihr Panel (0.1.14): Boxen mit [>] im Kopf, Karten in «Geteilte Puzzles», «Änderungen» unter «Über»; Klick weitergereicht im Skript (boxLead) */
+section.box:has(> .boxHead > .paneBtn), .clBox:has(> .clBoxHead > .paneBtn), .shareRow:has(.shareTitle > .paneBtn) { cursor:pointer; }
+@media (hover:hover) {
+  section.box:has(> .boxHead > .paneBtn):hover, .shareRow:not(.on):has(.shareTitle > .paneBtn):hover { border-color:color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  .clBox:has(> .clBoxHead > .paneBtn):hover .clBoxHead h3 { color:var(--accent); }
+}
 .boxTitle { margin:0 0 8px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:6px; }
 .boxTitle .tick { display:none !important; }  /* Häkchen links entfernt, Stand zeigt die Pfeilkette in der Vorschau (0.1.4) */
 .boxTitle .num { display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%; background:var(--bg); border:1px solid var(--line); font-size:12px; }
@@ -125,6 +134,7 @@ a.famRow:hover,a.famRow:focus-visible { border-color:var(--accent); }
 .counts { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
 .counts button { flex:1; border:0; border-radius:0; padding:7px 0; background:var(--bg); color:inherit; font-size:14px; }
 .counts button.on { background:var(--accent); color:var(--on-accent); font-weight:600; }
+#edgePick button { padding:7px 6px; line-height:1.25; }
 .startPick { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
 .startPick button { display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 4px; font-size:13px; }
 .startPick button svg { width:56px; height:34px; }
@@ -133,14 +143,19 @@ input[type=range] { width:100%; accent-color:var(--accent); }
 .rangeLbl { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:-2px; }
 
 /* Musik */
-#tracks { max-height:240px; overflow:auto; }
+#tracks { margin-bottom:6px; }  /* Liste so hoch wie das Panel, das Panel scrollt (Roger 22.11.2026, 0.1.8) */
 .track { display:flex; align-items:center; gap:10px; padding:6px 8px; border:1px solid var(--line); border-radius:5px; margin-bottom:5px; cursor:pointer; font-size:14px; background:var(--bg); }
 .track.on { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+#noMusicBtn.on { border-color:var(--accent); color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
 .track .t { flex:1; min-width:0; overflow-wrap:anywhere; }
 .track .t small { display:block; color:var(--muted); font-size:11px; }
 .track .d { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
 .track .pl { width:26px; height:26px; padding:0; border-radius:50%; font-size:11px; flex:none; }
 .track .nopl { width:26px; text-align:center; flex:none; }
+/* Ordner wie im Datei-Explorer: Ordner über den Stücken, «‹‹ Zurück» eine Ebene hoch (Roger 22.11.2026, 0.1.8) */
+.track.dir .ic, .track.up .ic { width:26px; text-align:center; flex:none; font-size:16px; }
+.track.dir .go { color:var(--muted); font-size:18px; flex:none; }
+.track.up { background:transparent; font-weight:600; }
 
 /* Vorschau */
 .tableWrap { position:relative; width:100%; aspect-ratio:16/10; border-radius:6px; overflow:hidden; background:#111; }
@@ -173,9 +188,19 @@ input[type=range] { width:100%; accent-color:var(--accent); }
 /* Geteilte Puzzles (wie Collage «Geteilte Collagen»), dazu ein Panel «Details» pro Link */
 #shareTools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
 #shareFilter { display:inline-flex; gap:4px; }
-#shareFilter button, #sharesPurge { padding:4px 10px; font-size:13px; }
+#shareFilter button { padding:4px 10px; font-size:13px; }
+/* Auswahl und Mehrfachaktionen wie Smart Albums (Kopf = alle Treffer, Leiste ab 1 gewählt), 0.1.8 */
+#sharePickAll { display:flex; align-items:center; gap:8px; margin:0 0 8px; padding-left:8px; font-size:13px; cursor:pointer; }
+#shareBar { position:sticky; top:0; z-index:3; display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:6px 8px; margin:0 0 8px; border:1px solid var(--accent); border-radius:8px; background:var(--card); }
+#shareBar select { flex:1 1 auto; width:auto; min-width:0; margin:0; }
+#shareBar button { width:auto; margin:0; }
+#shareBar .paneX { margin-left:auto; }
+@media (max-width:859px) { #shareBar { flex-wrap:nowrap; gap:6px; padding:6px; } #shareBar b { white-space:nowrap; } #shareBar button { padding-left:10px; padding-right:10px; } #shareBar .paneX { margin-left:0; } }
+.shareRow > .sharePick { flex:none; margin:16px 0 0; }
+.shareRow.picked { background:color-mix(in srgb, var(--accent) 8%, transparent); }
 #shareFilter button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
 #shareList { display:flex; flex-direction:column; gap:6px; }
+#shareSearch { width:100%; margin-bottom:8px; }
 .shareRow { display:flex; gap:10px; align-items:flex-start; padding:8px; border:1px solid var(--line); border-radius:5px; }
 .shareRow.on { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
 .shareRow > img { width:64px; height:48px; object-fit:cover; border-radius:3px; background:#111; flex:none; }
@@ -226,7 +251,7 @@ main { overflow-x:auto; }
 main > .left { flex:0 0 clamp(300px,32vw,380px); }
 .mkP { display:none; }
 .mkP.on { display:flex; flex-direction:column; flex:0 0 480px; width:480px; position:static; overflow:auto;
-  height:calc(100vh - var(--barH, 90px) - 40px); height:calc(100dvh - var(--barH, 90px) - 40px); }  /* bildschirmhoch (0.1.4) */
+  height:calc(100vh - var(--barH, 90px) - 40px); height:calc(100dvh - var(--barH, 90px) - 40px); overflow-x:hidden; }  /* bildschirmhoch (0.1.4); nicht seitlich verschiebbar, sonst wackelt es auf dem iPhone (0.1.8, wie Smart Albums 1.0.124) */
 #previewPane.on, #welcomePane.on { flex-basis:620px; width:620px; }
 /* Vorschau füllt auf dem Computer die Restbreite; Bühne so gross, dass alles ohne Scrollen ins Panel passt (Roger 21.11.2026, 0.1.4) */
 #previewPane.on { flex:1 0 620px; width:auto; }
@@ -247,6 +272,8 @@ button.hmTile:hover { border-color:var(--accent); } .hmTile .v { font-size:22px;
 ul.hmLog { list-style:none; margin:0; padding:0; } ul.hmLog li { padding:6px 0; border-bottom:1px solid var(--line); display:flex; gap:12px; }
 ul.hmLog .t { color:var(--muted); flex:none; min-width:130px; font-size:14px; }
 .hmFoot { margin-top:20px; }
+.hmStart { margin:10px 0 0; width:100%; height:auto; text-align:left; font:inherit; color:inherit; background:color-mix(in srgb, var(--accent) 8%, transparent); border-color:var(--accent); cursor:pointer; }
+.hmStart:hover { background:color-mix(in srgb, var(--accent) 15%, transparent); } .hmStart .n { background:var(--accent); color:#fff; }  /* E4: von der Willkommensseite direkt zur Motivwahl */
 .mkP > .paneHead { position:sticky; top:-12px; z-index:3; background:var(--card); margin:-12px -14px 10px; padding:12px 14px 8px; }
 .mkP .doneRow { margin-top:auto; }
 /* Fusszeile fest unten, Inhalt scrollt darunter durch (0.1.4) */
@@ -299,6 +326,16 @@ body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Start
 .mkRow { display:flex; width:100%; gap:8px; align-items:center; margin:10px 0 0; padding:8px 10px; height:auto; text-align:left; }
 .mkRow span:first-child { font-weight:600; }
 .mkRow b { margin-left:auto; font-size:16px; }
+/* P29 Zugriffe (Vorlage Smart Albums «Zugriffs-Statistik», 0.1.8) */
+.stRange { display:flex; gap:8px; } .stRange > div { flex:1; min-width:0; } .stRange input { width:100%; min-width:0; max-width:100%; box-sizing:border-box; }
+.stTiles { display:flex; gap:8px; margin:12px 0 6px; } .stTiles > div { flex:1; border:1px solid var(--line); border-radius:8px; padding:8px 12px; color:var(--muted); font-size:13px; }
+.stTiles b { display:block; font-size:22px; color:var(--text, inherit); }
+.logWrap { overflow-x:auto; }
+.logTab td { vertical-align:top; } .logTab td:first-child { white-space:nowrap; color:var(--muted); }
+.mkAlb.logTab td:nth-child(3) { white-space:normal; color:var(--text); } .logTab .logItem { color:var(--muted); }
+#logQ { width:100%; margin-bottom:6px; } #logWho { flex:1; min-width:0; }
+.stDays td.bar { width:35%; } .stDays td.bar span { display:block; height:8px; border-radius:4px; background:var(--accent); min-width:2px; }
+.stDays td.zero { color:var(--muted); } #stRank tr { cursor:pointer; } #stRank tr:hover td { background:color-mix(in srgb, var(--accent) 8%, transparent); }
 .mkFmt { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 6px; }
 .mkFmt button { margin:0; padding:4px 10px; display:inline-flex; align-items:center; gap:6px; }
 .mkAr { display:inline-block; border:1.5px solid currentColor; border-radius:2px; box-sizing:border-box; }
@@ -325,6 +362,14 @@ body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Start
 .mkProg button span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .mkProg .done button { background:var(--pzDone); }
 .mkProg .next button { text-decoration:underline; text-underline-offset:3px; }
+.mkProg .std button { background:#8a8f94; }  /* beim Standard gelassen: grau statt rot (Roger 22.11.2026, 0.1.8) */
+.mkProg button small { display:block; font-size:10px; font-weight:400; opacity:.9; }
+.mkStepPick { display:flex; flex-direction:column; gap:6px; margin:0 0 12px; }
+.mkStepPick label { display:flex; gap:8px; align-items:flex-start; cursor:pointer; }
+.mkStepPick input { margin-top:3px; flex:none; } .mkStepPick label.must { cursor:default; color:var(--muted); } .mkStepPick span { display:flex; flex-direction:column; }
+.mkStepPick small { color:var(--muted); font-size:12px; }
+.mkSuggest { margin:4px 0 0; font-size:13px; }
+.mkSuggest .chip { font:inherit; padding:3px 10px; border-radius:999px; margin:0; }
 .mkProg button:hover, .mkProg button:focus-visible { filter:brightness(1.15); }
 @media (max-width:560px) { .mkProg ol { overflow-x:auto; scrollbar-width:none; } .mkProg li { flex:0 0 76px; } }
 /* P8 Website-Titel (Roger 21.11.2026) */
@@ -335,7 +380,7 @@ body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Start
 .mkPvTitle .muted { font-size:12px; }
 /* P5 Schriftzug (Roger 21.11.2026) */
 .mkTxtPrev { position:relative; aspect-ratio:3896/2754; max-height:240px; margin:0 auto; border-radius:6px; overflow:hidden; background:#111; }
-.mkTxtPrev img { width:100%; height:100%; object-fit:cover; display:block; }
+.mkTxtPrev canvas { width:100%; height:100%; display:block; }
 .mkTxtBox { position:absolute; inset:0; display:flex; padding:6%; pointer-events:none; }
 .mkTxtBox span { line-height:1.15; max-width:100%; overflow-wrap:anywhere; }
 .mkTxtBox.pos-tl, .mkTxtBox.pos-tc, .mkTxtBox.pos-tr { align-items:flex-start; }
@@ -368,6 +413,12 @@ body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Start
 .mkTBox .mk { position:absolute; top:0; bottom:0; font-size:12px; color:var(--muted); padding:2px 0 0 4px; white-space:nowrap; }
 .mkTBox .mkZ { position:absolute; top:0; bottom:0; right:0; display:flex; align-items:flex-end; justify-content:center; padding:0 2px 4px; font-size:10px; line-height:1.1; text-align:center; color:var(--muted); background:repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--accent) 14%, transparent) 4px 8px); }
 .mkTBox .mk i { position:absolute; left:0; top:0; bottom:0; border-left:1.5px dashed var(--muted); }
+/* B2: Sekundenskala unter der Zeitleiste (Roger 22.11.2026) */
+.mkTAxis { position:relative; height:18px; font-size:11px; color:var(--muted); }
+.mkTAxis span { position:absolute; top:0; transform:translateX(-50%); padding-top:4px; white-space:nowrap; }
+.mkTAxis span::before { content:""; position:absolute; left:50%; top:0; height:4px; border-left:1px solid var(--muted); }
+.mkTAxis span.first { transform:none; } .mkTAxis span.first::before { left:0; }
+.mkTAxis span.last { transform:translateX(-100%); } .mkTAxis span.last::before { left:auto; right:0; }
 #cropTools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
 #cropTools select { width:auto; flex:1 1 200px; margin:0; }
 #cropTools button { margin:0; flex:1 1 0; min-width:0; padding-left:6px; padding-right:6px; }  /* Roger 21.11.2026: auf ganze Breite verteilt */
@@ -378,6 +429,7 @@ body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Start
 #cropFrame i[data-h="nw"] { left:-2px; top:-2px; cursor:nwse-resize; } #cropFrame i[data-h="ne"] { right:-2px; top:-2px; cursor:nesw-resize; }
 #cropFrame i[data-h="sw"] { left:-2px; bottom:-2px; cursor:nesw-resize; } #cropFrame i[data-h="se"] { right:-2px; bottom:-2px; cursor:nwse-resize; }
 #cropInfo { margin:8px 0 0; }
+.startPrev { display:block; width:100%; aspect-ratio:16/10; border-radius:8px; margin-top:4px; }
 #sideCrop .btnRow { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
 /* P20–P23 Startseite wie Collage */
 #familyBtn.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
@@ -430,9 +482,8 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
     </section>
 
     <section class="box mkStep" id="boxP27">
-      <h2 class="boxTitle fixed"><span class="num">1</span><span data-i18n="u.details">Puzzle Details</span> <span class="tick hidden" data-tick="name">✓</span></h2>
-      <label class="lbl" for="pzName" data-i18n="u.name">Name</label>
-      <input type="text" id="pzName" maxlength="120" autocomplete="off">
+      <div class="boxHead"><h2 class="boxTitle fixed"><span class="num">1</span><span data-i18n="u.details">Puzzle Details</span> <span class="tick hidden" data-tick="name">✓</span></h2><button type="button" class="paneBtn" data-go="P27" title="Panel öffnen" data-i18n-title="u.open" aria-label="Puzzle Details" data-i18n-aria-label="u.details">&gt;</button></div>
+      <p class="muted mkSum" id="sumP27"></p>
       <p class="muted mkSum" id="saveInfo"></p>
     </section>
 
@@ -475,6 +526,10 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <p class="muted" id="sharesSum"></p>
     </section>
     <section class="box">
+      <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="log.title">Protokoll</h2><button type="button" class="paneBtn" data-go="P30" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Protokoll rechts öffnen" data-i18n-aria-label="log.open">&gt;</button></div>
+      <p class="muted" data-i18n="log.sum">Wann wer was gemacht hat</p>
+    </section>
+    <section class="box">
       <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="settings.title">Einstellungen</h2><button type="button" class="paneBtn" data-go="P11" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Einstellungen rechts öffnen" data-i18n-aria-label="settings.open">&gt;</button></div>
       <p class="muted" data-i18n="settings.sum">Adresse der Live-Links</p>
     </section>
@@ -493,16 +548,44 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <div class="hmStep"><span class="n">2</span><div><b data-i18n="u.s2"></b><p data-i18n="u.s2t"></p></div></div>
       <div class="hmStep"><span class="n">3</span><div><b data-i18n="u.s3"></b><p data-i18n="u.s3t"></p></div></div>
     </div>
+    <button type="button" class="hmStep hmStart" data-go="P27"><span class="n" aria-hidden="true">›</span><div><b data-i18n="u.startNow">Jetzt bist du dran</b><p data-i18n="u.startNowT"></p></div></button>
     <h4 data-i18n="u.glance">Auf einen Blick</h4>
     <div class="hmTiles">
       <button type="button" class="hmTile" data-go="P22"><span class="v" id="hmTPz">0</span><span class="l" data-i18n="u.tPuzzles">Puzzles</span></button>
       <button type="button" class="hmTile" data-go="P9"><span class="v" id="hmTLinks">0</span><span class="l" data-i18n="u.tLinks">aktive Links</span></button>
-      <button type="button" class="hmTile" data-go="P9"><span class="v" id="hmTViews">0</span><span class="l" data-i18n="u.tViews">Aufrufe</span></button>
+      <button type="button" class="hmTile" id="hmViews" data-go="P29"><span class="v" id="hmTViews">0</span><span class="l" data-i18n="u.tViews">Aufrufe</span></button>
       <button type="button" class="hmTile" data-go="P26"><span class="v" id="hmTMusic">0</span><span class="l" data-i18n="u.tMusic">eigene Musik</span></button>
     </div>
     <h4 data-i18n="u.recent">Zuletzt</h4>
     <ul class="hmLog" id="hmLog"></ul>
     <p class="hmFoot muted"><span id="hmVer"></span> · <a href="#" data-go="P13" data-i18n="u.whatsNew">Was ist neu?</a></p>
+  </aside>
+
+  <!-- P27 Puzzle Details: Name, für wen, Vorlage, interne Notiz, welche Schritte man selber einstellt (Roger 22.11.2026, 0.1.8) -->
+  <aside class="pane mkP" id="sideDetails" data-pno="P27">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">1</span><span data-i18n="u.details">Puzzle Details</span> <span class="tick hidden" data-tick="name">✓</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody">
+      <label class="lbl" for="pzName" data-i18n="u.name">Name</label>
+      <input type="text" id="pzName" maxlength="120" autocomplete="off">
+      <label class="lbl" for="pzFor" data-i18n="u.forWhom">Für wen / Anlass (optional)</label>
+      <input type="text" id="pzFor" maxlength="120" autocomplete="off" placeholder="" data-i18n-placeholder="u.forWhomPh">
+      <p class="muted mkNote" data-i18n="u.forWhomNote"></p>
+      <div id="pzTplRow">
+      <label class="lbl" for="pzTpl" data-i18n="u.tpl">Vorlage übernehmen</label>
+      <select id="pzTpl"></select>
+      <p class="muted mkNote" data-i18n="u.tplNote"></p>
+      </div>
+      <label class="lbl" for="pzNote" data-i18n="u.note">Interne Notiz</label>
+      <textarea id="pzNote" rows="2" maxlength="2000"></textarea>
+      <p class="muted mkNote" data-i18n="u.noteNote"></p>
+      <h3 class="paneSection" data-i18n="u.stepsHead">Welche Schritte stellst du selber ein?</h3>
+      <p class="muted mkNote" data-i18n="u.stepsNote"></p>
+      <div class="mkStepPick" id="pzSteps"></div>
+      <div class="btnRow"><button type="button" id="pzStepsDef" data-i18n="u.stepsDef">Schrittwahl als Standard speichern</button></div>
+      <div class="btnRow mkEven"><button type="button" class="primary" id="pzToMotif" data-i18n="u.toMotif">Motiv wählen ›</button><button type="button" id="pzQuick" data-i18n="u.quick">Motiv wählen und gleich teilen</button></div>
+      <p class="muted mkNote" data-i18n="u.quickNote"></p>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
   </aside>
 
   <!-- P2 Motiv -->
@@ -551,16 +634,16 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <div class="mkZoom"><span class="muted" data-i18n="u.zoom">Zoom</span><input type="range" id="cropZoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom" data-i18n-aria-label="u.zoom"></div>
       <p id="cropInfo" class="muted"></p>
     </div>
-    <div class="btnRow doneRow"><button type="button" data-go="CLOSE" data-i18n="u.cancel">Abbrechen</button><button type="button" class="primary" id="cropOk" data-i18n="u.apply">Übernehmen</button></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" id="cropOk" data-i18n="pane.done">Fertig</button></div>
   </aside>
 
   <!-- P26 Musik -->
   <aside class="pane mkP" id="sideMusic" data-pno="P26">
     <div class="paneHead"><h2 class="boxTitle"><span class="num">4</span><span data-i18n="u.music">Musik</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
     <div class="mkBody">
+      <div class="btnRow mkEven" id="musicBtns" style="margin:0 0 10px"><button type="button" id="noMusicBtn" data-i18n="p.noMusic">Keine Musik</button><button type="button" class="primary" id="musicUpBtn" data-i18n="p.musicUpload" data-i18n-title="u.ownMusicHint">Musik hochladen</button></div>
       <input type="search" id="trackSearch" placeholder="Musik suchen" data-i18n-placeholder="p.musicSearch" style="margin-bottom:6px">
       <div id="tracks"></div>
-      <label class="drop" for="musicFile" style="padding:8px;margin-top:2px"><span><strong style="font-size:14px" data-i18n="p.ownMusic">Eigene Musik hochladen</strong></span><span data-i18n="u.ownMusicHint"></span></label>
       <input type="file" id="musicFile" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" class="hidden">
       <div id="musicOpts">
         <label class="lbl" for="vol" data-i18n="p.volume">Lautstärke</label>
@@ -582,10 +665,17 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <div class="startPick" id="startPick"><button type="button" data-s="scatter" class="on"><svg viewBox="0 0 56 34" aria-hidden="true"><rect x="16" y="8" width="24" height="18" fill="none" stroke="currentColor" stroke-dasharray="2 2" opacity=".5"/><g fill="currentColor" opacity=".8"><rect x="3" y="4" width="6" height="6" transform="rotate(20 6 7)"/><rect x="45" y="5" width="6" height="6" transform="rotate(-15 48 8)"/><rect x="4" y="22" width="6" height="6" transform="rotate(40 7 25)"/><rect x="46" y="23" width="6" height="6"/><rect x="25" y="28" width="5" height="5" transform="rotate(30 27 30)"/><rect x="24" y="0" width="5" height="5"/></g></svg><span data-i18n="p.start.scatter">Verstreut</span></button>
 <button type="button" data-s="heap"><svg viewBox="0 0 56 34" aria-hidden="true"><rect x="22" y="8" width="24" height="18" fill="none" stroke="currentColor" stroke-dasharray="2 2" opacity=".5"/><g fill="currentColor" opacity=".8"><rect x="4" y="16" width="6" height="6" transform="rotate(20 7 19)"/><rect x="8" y="12" width="6" height="6" transform="rotate(-25 11 15)"/><rect x="6" y="21" width="6" height="6" transform="rotate(10 9 24)"/><rect x="11" y="18" width="6" height="6" transform="rotate(45 14 21)"/><rect x="2" y="12" width="6" height="6"/></g></svg><span data-i18n="p.start.heap">Haufen</span></button>
 <button type="button" data-s="mix"><svg viewBox="0 0 56 34" aria-hidden="true"><rect x="22" y="8" width="24" height="18" fill="none" stroke="currentColor" stroke-dasharray="2 2" opacity=".5"/><g fill="currentColor" opacity=".8"><rect x="4" y="16" width="6" height="6" transform="rotate(20 7 19)"/><rect x="8" y="12" width="6" height="6" transform="rotate(-25 11 15)"/><rect x="6" y="21" width="6" height="6"/><rect x="48" y="4" width="5" height="5" transform="rotate(30 50 6)"/><rect x="47" y="25" width="5" height="5"/><rect x="30" y="28" width="5" height="5" transform="rotate(-20 32 30)"/></g></svg><span data-i18n="p.start.mix">Gemischt</span></button></div>
+      <label class="lbl" data-i18n="p.edgesLbl">Form der Teile</label>
+      <div class="counts" id="edgePick"><button type="button" data-e="round" data-i18n="p.edges.round">Organisch (Original)</button><button type="button" data-e="classic" data-i18n="p.edges.classic">Klassisch (gerade Kante)</button></div>
       <label class="swRow"><span data-i18n="p.rot">Teile am Anfang verdreht</span><input type="checkbox" class="sw" role="switch" id="optRot"></label>
       <label class="swRow"><span data-i18n="p.frame">Zuerst den Rahmen</span><input type="checkbox" class="sw" role="switch" id="optFrame" checked></label>
-      <label class="swRow"><span data-i18n="p.ghost">Vorlage blass auf dem Tisch</span><input type="checkbox" class="sw" role="switch" id="optGhost"></label>
+      <label class="swRow"><span data-i18n="p.ghost">Motiv transparent anzeigen beim Start</span><input type="checkbox" class="sw" role="switch" id="optGhost"></label>
+      <div id="ghostOpts" class="hidden"><label class="lbl" for="ghostPct"><span data-i18n="p.ghostPct">Deckkraft des Motivs</span> <b id="ghostPctV">15 %</b></label>
+      <input type="range" id="ghostPct" min="5" max="60" step="5" value="15"></div>
       <div class="btnRow"><button id="reshuffle" type="button" data-i18n="p.reshuffle">Neu mischen</button></div>
+      <label class="lbl" data-i18n="p.startPrev">So liegt das Puzzle beim Start</label>
+      <canvas id="startPrev" class="startPrev" aria-hidden="true"></canvas>
+      <div class="muted hidden" id="startPrevNone" data-i18n="p.startPrevNone">Zuerst ein Motiv wählen.</div>
     </div>
     <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
   </aside>
@@ -594,7 +684,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
   <aside class="pane mkP" id="sideTempo" data-pno="P4">
     <div class="paneHead"><h2 class="boxTitle"><span class="num">6</span><span data-i18n="u.tempo">Dauer und Tempo</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
     <div class="mkBody">
-      <button type="button" class="mkRow mkMusicSel" data-go="P26"><span id="tmMusic"></span><span class="muted" id="tmMusicLen"></span><b aria-hidden="true">›</b></button>
+      <button type="button" class="mkRow mkMusicSel" data-go="P26" data-stack="push"><span id="tmMusic"></span><span class="muted" id="tmMusicLen"></span><b aria-hidden="true">›</b></button>
       <label class="lbl"><span data-i18n="p.duration">Dauer</span> <span class="muted" data-i18n="p.durationMax">(höchstens 1 Minute)</span></label>
       <div class="tabs sm" role="tablist" id="durTabs">
         <button role="tab" aria-selected="false" data-d="music" data-i18n="p.dur.music">Wie die Musik</button>
@@ -602,47 +692,70 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       </div>
       <div id="musicCut" class="muted hidden" style="margin-top:-4px" data-i18n="p.musicCut"></div>
       <div id="ownDur">
-        <label class="lbl" for="durSec" style="margin-top:0" data-i18n="p.seconds">Sekunden (10 bis 60)</label>
+        <label class="lbl" for="durSec" style="margin-top:0" data-i18n="u.totalDur">Gesamtdauer (10 bis 60 s)</label>
         <input type="range" id="durSec" min="10" max="60" value="45">
         <div class="rangeLbl"><span>10 s</span><span id="durVal">45 s</span><span>60 s</span></div>
       </div>
-      <label class="lbl" for="hold"><span data-i18n="u.holdLbl"></span> <b id="mkHoldV">5 s</b></label>
-      <input type="range" id="hold" min="2" max="10" value="5">
-      <label class="lbl" for="tempo" data-i18n="u.tempoLbl">Tempo-Bogen</label>
-      <input type="range" id="tempo" min="0" max="200" value="50">
-      <div class="rangeLbl"><span data-i18n="u.even"></span><span data-i18n="u.strong"></span><span data-i18n="u.vstrong"></span></div>
+      <!-- Reihenfolge wie die Zeitleiste, alle Werte in Sekunden (Roger 22.11.2026, 0.1.8) -->
+      <label class="lbl" for="mkLead"><span data-i18n="u.lead">Start nach</span> <b id="mkLeadV">1.5 s</b></label>
+      <input type="range" id="mkLead" min="0" max="10" step="0.5" value="1.5">
       <div id="mkFrameOnly">  <!-- nur mit «Zuerst den Rahmen», sonst ohne Wirkung (Roger 21.11.2026, 0.1.4) -->
       <label class="lbl" for="mkRahmen"><span data-i18n="u.frameAt"></span> <b id="mkRahmenV">40 %</b></label>
       <input type="range" id="mkRahmen" min="15" max="70" value="40">
       <div class="rangeLbl"><span data-i18n="u.early"></span><span data-i18n="u.late"></span></div>
+      <p class="muted mkNote" id="mkFrameNote" data-i18n="u.frameNote"></p>
       </div>
+      <label class="lbl" for="tempo" data-i18n="u.tempoLbl">Tempo-Bogen</label>
+      <input type="range" id="tempo" min="0" max="200" value="50">
+      <div class="rangeLbl"><span data-i18n="u.even"></span><span data-i18n="u.strong"></span><span data-i18n="u.vstrong"></span></div>
       <label class="lbl" for="mkRamp"><span data-i18n="u.ramp"></span> <b id="mkRampV">5 %</b></label>
       <input type="range" id="mkRamp" min="0" max="60" value="5">
       <div class="rangeLbl"><span data-i18n="u.rampNow"></span><span data-i18n="u.later"></span></div>
-      <p class="muted mkNote" id="mkFrameNote" data-i18n="u.frameNote"></p>
+      <label class="lbl" for="hold"><span data-i18n="u.holdLbl"></span> <b id="mkHoldV">5 s</b></label>
+      <input type="range" id="hold" min="2" max="10" value="5">
       <div class="stats mkTempoStats" id="mkTStats"></div>
       <div class="stats mkTempoStats mkTSeg" id="mkTSeg"></div>
       <div class="chartWrap mkTempo"><div class="cap"><span data-i18n="u.tChart"></span></div>
         <div class="mkTBox"><svg id="mkTSvg" viewBox="0 0 450 100" preserveAspectRatio="none" aria-hidden="true"><path id="mkTArea" class="a"/><path id="mkTLine" class="l"/></svg>
           <span class="mk mkTR" id="mkTRm"><i></i><span data-i18n="u.mFrame">Rahmen</span></span><span class="mkZ" id="mkTZ" data-i18n-html="u.mBig"></span><span class="mk" id="mkTFm"><i></i><span data-i18n="u.mDone">fertig</span></span></div>
+        <div class="mkTAxis" id="mkTAxis" aria-hidden="true"></div>
       </div>
     </div>
     <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
   </aside>
 
-  <!-- P5 Schriftzug -->
-  <aside class="pane mkP" id="sideText" data-pno="P5">
+  <!-- P5 Schriftzug: zwei Boxen, je [>] ins gemeinsame Detailpanel P31 (C1–C3, Roger 22.11.2026, 0.1.8) -->
+  <aside class="pane mkP" id="sideTextHub" data-pno="P5">
     <div class="paneHead"><h2 class="boxTitle"><span class="num">7</span><span data-i18n="u.text">Schriftzug</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
     <div class="mkBody">
-      <label class="lbl" for="txt" data-i18n="p.textLbl">Text auf dem Motiv (mehrzeilig, optional)</label>
+      <section class="box mkStep">
+        <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="u.tx.greet">Grussbotschaft auf dem leeren Puzzle</h2><button type="button" class="paneBtn" data-go="P31" data-tx="greet" title="Panel öffnen" data-i18n-title="u.open" aria-label="Grussbotschaft auf dem leeren Puzzle" data-i18n-aria-label="u.tx.greet">&gt;</button></div>
+        <p class="muted mkSum" id="sumTxGreet"></p>
+      </section>
+      <section class="box mkStep">
+        <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="u.tx.text">Grussbotschaft auf dem fertigen Puzzle</h2><button type="button" class="paneBtn" data-go="P31" data-tx="text" title="Panel öffnen" data-i18n-title="u.open" aria-label="Grussbotschaft auf dem fertigen Puzzle" data-i18n-aria-label="u.tx.text">&gt;</button></div>
+        <p class="muted mkSum" id="sumTxText"></p>
+      </section>
+    </div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P31 Schriftzug-Details: dieselben Einstellungen für beide Boxen, st.tx sagt welche -->
+  <aside class="pane mkP" id="sideText" data-pno="P31">
+    <div class="paneHead"><h2 class="boxTitle"><span class="num">7</span><span id="txHead"></span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="mkBody">
+      <label class="lbl" for="txt" id="txtLbl"></label>
       <textarea id="txt" rows="2" maxlength="300"></textarea>
+      <p class="mkSuggest hidden" id="txtSuggest"><span class="muted" data-i18n="u.suggest">Vorschlag:</span> <button type="button" class="chip" id="txtSuggestBtn"></button></p>
+      <div id="txWhen">
       <label class="lbl" data-i18n="p.textWhen">Wann sichtbar</label>
       <div class="tabs sm" role="tablist" id="txtMode">
         <button role="tab" aria-selected="true" data-m="in" data-i18n="p.textMode.in">Im Puzzle</button>
         <button role="tab" aria-selected="false" data-m="end" data-i18n="p.textMode.end">Erscheint am Schluss</button>
       </div>
+      </div>
       <label class="lbl" data-i18n="u.textPrev">Vorschau</label>
-      <div class="mkTxtPrev" id="mkTxtPrev"><img id="mkTxtImg" alt=""><div class="mkTxtBox pos-mc" id="mkTxtBox"><span id="mkTxtOut"></span></div></div>
+      <div class="mkTxtPrev" id="mkTxtPrev"><canvas id="mkTxtCv"></canvas></div>
       <label class="lbl" data-i18n="u.fonts">Schriftarten</label>
       <div class="mkFont" id="fontSys" role="radiogroup" aria-label="Schriftarten" data-i18n-aria-label="u.fonts"></div>
       <label class="lbl" data-i18n="u.moreFonts">Weitere Schriftarten</label>
@@ -651,6 +764,13 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <label class="lbl" for="mkSize"><span data-i18n="u.size">Schriftgrösse</span> <b id="mkSizeV">100 %</b></label>
       <input type="range" id="mkSize" min="50" max="200" step="5" value="100">
       <div class="rangeLbl"><span data-i18n="u.small"></span><span data-i18n="u.normal"></span><span data-i18n="u.big"></span></div>
+      <!-- C1 Bogen, C2 Drehen: 0 in der Mitte = gerade (Roger 22.11.2026, 0.1.8) -->
+      <label class="lbl" for="mkArc"><span data-i18n="u.arc">Bogen</span> <b id="mkArcV">0</b></label>
+      <input type="range" id="mkArc" min="-100" max="100" step="5" value="0">
+      <div class="rangeLbl"><span data-i18n="u.arcDown"></span><span data-i18n="u.straight"></span><span data-i18n="u.arcUp"></span></div>
+      <label class="lbl" for="mkRot"><span data-i18n="u.rot">Drehen</span> <b id="mkRotV">0°</b></label>
+      <input type="range" id="mkRot" min="-45" max="45" value="0">
+      <div class="rangeLbl"><span>−45°</span><span>0°</span><span>45°</span></div>
       <label class="lbl" data-i18n="u.pos">Position</label>
       <div class="mkPos" id="mkPos" role="radiogroup" aria-label="Position" data-i18n-aria-label="u.pos"></div>
       <label class="lbl" data-i18n="u.color">Farbe</label>
@@ -696,13 +816,18 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
         <div class="linkRow"><code id="linkTxt"></code><button class="cpy" type="button" title="Link kopieren" data-i18n-title="p.copy" aria-label="Link kopieren" data-i18n-aria-label="p.copy" id="cpy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
         <p class="muted" id="linkState" style="margin:0"></p>
         <label class="swRow"><span data-i18n="p.active">Aktiv</span><input type="checkbox" class="sw" role="switch" id="lkActive"></label>
-        <label class="swRow"><span data-i18n="p.password">Passwort</span><input type="checkbox" class="sw" role="switch" id="lkPw"></label>
-        <div id="pwRow" class="hidden"><input type="password" id="pwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="pwSet" data-i18n="p.pwSet">Setzen</button></div>
         <label class="swRow"><span data-i18n="p.download">Download erlauben (Foto)</span><input type="checkbox" class="sw" role="switch" id="lkDl"></label>
+        <label class="swRow hidden" id="lkVidRow"><span data-i18n="p.videoAllow">Download erlauben (Video)</span><input type="checkbox" class="sw" role="switch" id="lkVid"></label>
         <label class="swRow"><span data-i18n="p.metadata">Metadaten zeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="lkMeta"></label>
-        <label class="lbl" for="lkDays" data-i18n="p.valid">Gültig</label>
-        <select id="lkDays"><option value="7" data-i18n="p.days7">7 Tage</option><option value="30" data-i18n="p.days30">30 Tage</option><option value="90" data-i18n="p.days90">90 Tage</option><option value="365" data-i18n="p.days365">1 Jahr</option><option value="0" data-i18n="p.days0">Unbegrenzt</option><option value="until" hidden data-i18n="p.daysUntil">Bis Datum</option></select>
-        <div class="btnRow"><button id="waBtn" type="button" data-i18n="p.whatsapp">Per WhatsApp senden</button><button id="rmLink" type="button" class="danger" data-i18n="p.rmLink">Link löschen</button></div>
+        <label class="swRow"><span data-i18n="p.passwordOpt">Passwort (optional)</span><input type="checkbox" class="sw" role="switch" id="lkPw"></label>
+        <div id="pwRow" class="hidden"><input type="password" id="pwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="pwSet" data-i18n="p.pwSet">Setzen</button></div>
+        <label class="lbl" for="lkFrom" data-i18n="p.validFrom">Gültig ab</label>
+        <input type="date" id="lkFrom">
+        <label class="lbl" for="lkDays" data-i18n="sh.untilLabel">Gültig bis</label>
+        <select id="lkDays"></select>
+        <input type="date" id="lkUntil" class="validUntil" aria-label="Gültig bis" data-i18n-aria-label="sh.untilLabel">
+        <p class="muted validNone hidden" id="lkNone" data-i18n="sh.unlimitedOpt">unbegrenzt</p>
+        <div class="btnRow"><button id="shareBtn" type="button" class="primary hidden" data-i18n="p.share">Link teilen</button><button id="waBtn" type="button" data-i18n="p.whatsapp">Per WhatsApp senden</button><button id="rmLink" type="button" class="danger" data-i18n="p.rmLink">Link löschen</button></div>
         <div class="ogCard"><img id="ogImg" alt=""><div><strong id="ogTitle"></strong><span class="muted" id="ogText"></span><br><span class="muted" id="ogHost"></span></div></div>
       </div>
       <div class="btnRow hidden" id="delRow"><button id="delBtn" type="button" class="danger" data-i18n="p.delete">Puzzle löschen</button></div>
@@ -729,7 +854,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <input type="range" id="pzScrub" min="0" max="1000" value="0" aria-label="Zeit" data-i18n-aria-label="p.time">
       <span class="time" id="pzTime">0:00 / 0:00</span>
     </div>
-    <div class="btnRow mkBtns"><button type="button" class="primary" id="pzEdit" data-i18n="pz.edit">Bearbeiten</button><button type="button" id="pzReuse" data-i18n="pz.reuse">Nur Einstellungen übernehmen</button><button type="button" id="pzDel" class="danger" data-i18n="u.delete">Löschen</button></div>
+    <div class="btnRow mkBtns"><button type="button" class="primary" id="pzEdit" data-i18n="pz.edit">Bearbeiten</button><button type="button" id="pzReuse" data-i18n="pz.reuse">Nur Einstellungen übernehmen</button><button type="button" id="pzStd" data-i18n="pz.asDefault">Als Standard übernehmen</button><button type="button" id="pzDel" class="danger" data-i18n="u.delete">Löschen</button></div>
     <p class="muted mkNote" id="pzHint" data-i18n="u.pzHint"></p>
     <h3 class="mkSub" data-i18n="u.madeFrom">Erstellt aus</h3>
     <dl class="mkFacts" id="pzFacts"></dl>
@@ -753,12 +878,21 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
   <!-- P9 Geteilte Puzzles -->
   <aside class="pane mkP" id="sideMain" data-pno="P9">
     <div class="paneHead"><h2 data-i18n="sh.title">Geteilte Puzzles</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <h3 class="paneSection" data-i18n="st.title">Zugriffs-Statistik</h3>
+    <button type="button" class="mkRow" id="sharesStats" data-go="P29" data-stack="push"><span id="sharesStatsN"></span><span class="muted" data-i18n="st.allLinks">Alle Links</span><b aria-hidden="true">›</b></button>
+    <p class="muted" style="margin:8px 0 12px" data-i18n="sh.counted">Gezählt wird, wer die Seite öffnet.</p>
+    <input type="search" id="shareSearch" autocomplete="off" placeholder="Link suchen" data-i18n-placeholder="sh.search" aria-label="Link suchen" data-i18n-aria-label="sh.search">
     <div id="shareTools">
       <span id="shareFilter" role="group" aria-label="Live-Links filtern" data-i18n-aria-label="sh.filter"><button type="button" data-filter="active">Aktiv</button><button type="button" data-filter="expired">Abgelaufen</button><button type="button" data-filter="all" class="on">Alle</button></span>
-      <button type="button" id="sharesPurge" class="hidden" data-i18n="sh.purge">Abgelaufene löschen</button>
+    </div>
+    <label id="sharePickAll" class="hidden"><input type="checkbox" id="shareAll"><span data-i18n="sh.pickAll">Alle Treffer auswählen</span></label>
+    <div id="shareBar" class="hidden" role="toolbar" aria-label="Aktionen für die Auswahl" data-i18n-aria-label="sh.bar">
+      <b id="shareBarN"></b>
+      <select id="shareAct" aria-label="Aktion" data-i18n-aria-label="sh.action"><option value="" data-i18n="sh.actChoose">Aktion wählen …</option><option value="delete" data-i18n="sh.delete">Löschen</option></select>
+      <button type="button" id="shareRun" class="danger" disabled data-i18n="sh.run">Ausführen</button>
+      <button type="button" id="shareBarX" class="paneX" title="Auswahl aufheben" data-i18n-title="sh.pickNone" aria-label="Auswahl aufheben" data-i18n-aria-label="sh.pickNone">×</button>
     </div>
     <div id="shareList"></div>
-    <p class="muted" style="margin:8px 0 0" data-i18n="sh.counted">Gezählt wird, wer die Seite öffnet.</p>
     <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
   </aside>
 
@@ -771,16 +905,48 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
     <p class="muted mkNote" style="margin-top:4px" data-i18n="u.shWebTitleNote"></p>
     <div class="linkRow"><code id="shUrl"></code><button class="cpy" type="button" id="shCopy" title="Link kopieren" data-i18n-title="p.copy" aria-label="Link kopieren" data-i18n-aria-label="p.copy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
     <div id="shFacts"></div>
+    <h3 class="paneSection" data-i18n="st.title">Zugriffs-Statistik</h3>
+    <button type="button" class="mkRow" id="shStats" data-go="P29" data-stack="push"><span id="shStatsN"></span><span class="muted" id="shStatsLast"></span><b aria-hidden="true">›</b></button>
     <label class="swRow"><span data-i18n="p.active">Aktiv</span><input type="checkbox" class="sw" role="switch" id="shActive"></label>
-    <label class="swRow"><span data-i18n="p.password">Passwort</span><input type="checkbox" class="sw" role="switch" id="shPw"></label>
-    <div id="shPwRow" class="hidden"><input type="password" id="shPwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="shPwSet" data-i18n="p.pwSet">Setzen</button></div>
     <label class="swRow"><span data-i18n="p.download">Download erlauben (Foto)</span><input type="checkbox" class="sw" role="switch" id="shDl"></label>
+    <label class="swRow hidden" id="shVidRow"><span data-i18n="p.videoAllow">Download erlauben (Video)</span><input type="checkbox" class="sw" role="switch" id="shVid"></label>
     <label class="swRow"><span data-i18n="p.metadata">Metadaten zeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="shMeta"></label>
-    <label class="lbl" for="shDays" data-i18n="sh.valid">Gültigkeit ab heute</label>
+    <label class="swRow"><span data-i18n="p.passwordOpt">Passwort (optional)</span><input type="checkbox" class="sw" role="switch" id="shPw"></label>
+    <div id="shPwRow" class="hidden"><input type="password" id="shPwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="shPwSet" data-i18n="p.pwSet">Setzen</button></div>
+    <label class="lbl" for="shFrom" data-i18n="p.validFrom">Gültig ab</label>
+    <input type="date" id="shFrom">
+    <label class="lbl" for="shDays" data-i18n="sh.untilLabel">Gültig bis</label>
     <select id="shDays"></select>
-    <input type="date" id="shUntil" class="hidden" aria-label="Gültig bis" data-i18n-aria-label="sh.untilLabel">
+    <input type="date" id="shUntil" class="validUntil" aria-label="Gültig bis" data-i18n-aria-label="sh.untilLabel">
+    <p class="muted validNone hidden" id="shNone" data-i18n="sh.unlimitedOpt">unbegrenzt</p>
+    <div class="btnRow"><button type="button" id="shWa" class="hidden" data-i18n="p.whatsapp">Per WhatsApp senden</button></div>
     <div class="btnRow"><button type="button" id="shOpen" data-i18n="sh.openLink">Öffnen</button><button type="button" id="shEdit" data-i18n="sh.editPuzzle">Puzzle bearbeiten</button></div>
     <div class="btnRow"><button type="button" id="shDel" class="danger" data-i18n="p.rmLink">Link löschen</button></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P29 Zugriffe: pro Link oder alle Links, Aufrufe pro Tag (0.1.8) -->
+  <aside class="pane mkP" id="sideStats" data-pno="P29">
+    <div class="paneHead"><h2><span class="hidden" data-i18n="st.crumb">Zugriffe</span><span id="stTitle"></span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <label class="lbl" for="stLink" data-i18n="st.link">Link</label>
+    <select id="stLink"></select>
+    <div class="stRange">
+      <div><label class="lbl" for="stFrom" data-i18n="st.from">von</label><input type="date" id="stFrom"></div>
+      <div><label class="lbl" for="stTo" data-i18n="st.to">bis</label><input type="date" id="stTo"></div>
+    </div>
+    <div class="btnRow"><button type="button" id="stSearch" data-i18n="st.search">Suchen</button><button type="button" id="stAllDays" data-i18n="st.allDays">Alle Tage</button></div>
+    <div id="stOut"></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P30 Protokoll (Vorlage Smart Albums) -->
+  <aside class="pane mkP" id="sideLog" data-pno="P30">
+    <div class="paneHead"><h2 data-i18n="log.title">Protokoll</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <p class="muted" id="logIntro"></p>
+    <input type="search" id="logQ" autocomplete="off" placeholder="Suchen" data-i18n-placeholder="log.searchPh" aria-label="Suchen" data-i18n-aria-label="log.searchPh">
+    <div class="btnRow"><select id="logWho" aria-label="Wer" data-i18n-aria-label="log.colWho"></select><button type="button" id="logCsv" data-i18n="log.csv">Als CSV exportieren</button></div>
+    <p class="muted" id="logN"></p>
+    <div class="logWrap"><table class="mkAlb logTab"><thead><tr><th data-i18n="log.colWhen">Wann</th><th data-i18n="log.colWho">Wer</th><th data-i18n="log.colWhat">Was</th></tr></thead><tbody id="logBody"></tbody></table></div>
     <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
   </aside>
 
@@ -788,6 +954,39 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
   <aside class="pane mkP" id="sideSettings" data-pno="P11">
     <div class="paneHead"><h2 data-i18n="settings.title">Einstellungen</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
     <div id="settingsBody"></div>
+  <div id="settingsMore">
+    <h3 class="paneSection" data-i18n="set.defHead">Standard für neue Puzzles</h3>
+    <p class="muted" data-i18n="set.defIntro"></p>
+    <dl class="mkFacts" id="defFacts"></dl>
+    <label class="lbl" data-i18n="set.defSteps">Bei «Neues Puzzle» selber einstellen</label>
+    <div class="mkStepPick" id="defSteps"></div>
+    <p class="muted" id="defSrc"></p>
+    <div class="btnRow"><button type="button" id="defFromCur" data-i18n="set.defFromCur">Aktuelles Puzzle als Standard</button><button type="button" id="defReset" data-i18n="set.defReset">Werkseinstellung</button></div>
+    <h3 class="paneSection" data-i18n="set.madeHead">Erstellt mit</h3>
+    <div class="shareUrlForm"><label for="madeWithText" data-i18n="set.madeTextLbl">Erstellt mit</label>
+    <input type="text" id="madeWithText" maxlength="120" placeholder="" data-i18n-placeholder="set.madeTextPh"></div>
+    <div class="shareUrlForm"><label for="madeWithUrl" data-i18n="set.madeLbl">Erstellt mit URL</label>
+    <input type="url" id="madeWithUrl" maxlength="300" spellcheck="false" placeholder="https://example.com"></div>
+    <p class="muted" data-i18n="set.madeNote"></p>
+    <p class="muted" id="copyFixed"></p>
+    <div class="btnRow"><button type="button" id="madeSave" data-i18n="set.madeSave">Speichern</button></div>
+    <p class="error hidden" id="madeErr"></p>
+    <h3 class="paneSection" data-i18n="set.videoHead">Video-Download</h3>
+    <label class="swRow"><span data-i18n="set.videoOn">Videos erstellen</span><input type="checkbox" class="sw" role="switch" id="videoOn"></label>
+    <p class="muted" data-i18n="set.videoNote"></p>
+    <p class="muted" id="videoState"></p>
+    <div id="ntfySet" class="hidden">
+    <h3 class="paneSection" data-i18n="set.ntfyHead">Meldungen aufs Handy (ntfy)</h3>
+    <p class="muted" id="ntfyState"></p>
+    <label class="swRow"><span data-i18n="set.ntfyErrors">Fehler</span><input type="checkbox" class="sw" role="switch" id="ntfyErrors" data-kind="errors"></label>
+    <label class="swRow"><span data-i18n="set.ntfySummary">Tageszusammenfassung</span><input type="checkbox" class="sw" role="switch" id="ntfySummary" data-kind="summary"></label>
+    <label class="lbl" for="ntfyTime" data-i18n="set.ntfyTime">Uhrzeit der Tageszusammenfassung</label>
+    <input type="time" id="ntfyTime" step="60">
+    <p class="muted" data-i18n="set.ntfyTimeNote"></p>
+    <div class="btnRow"><button type="button" id="ntfyTest" data-i18n="set.ntfyTest">Testmeldung senden</button><button type="button" id="ntfyNow" data-i18n="set.ntfyNow">Zusammenfassung jetzt senden</button></div>
+    <p class="muted" id="ntfyLast"></p>
+    </div>
+  </div>
     <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
   </aside>
   <aside class="pane mkP" id="sideAbout" data-pno="P12">
@@ -807,7 +1006,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
 {{I18N}}<script src="/common.js?v={{VERSION}}"></script>
 <script src="/profile.js?v={{VERSION}}"></script>
 <script src="/puzzle-engine.js?v={{VERSION}}"></script>
-<script>
+{{MODE}}<script>
 "use strict";
 // Panel-Oberfläche nach dem Mockup docs/design/mockups/puzzle/puzzle-panels.html (Roger 21.11.2026):
 // links die Startspalte mit den Schritten 1–9, rechts daneben die offenen Panels (P2 … P28)
@@ -832,9 +1031,23 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 
 // ---------- Zustand ----------
 const st = { id: null, img: null, base: null, asset: null, motifName: "", motifSrc: "", photoDirty: false, photoGen: 0, dirty: false, rev: 0,
-             crop: null, cropDone: false, visited: {}, count: 100, start: "scatter", seed: 4711, durMode: "own", textMode: "in", textColor: "#ffffff",
-             textFont: "hand", textPos: "mc", music: null, tracks: [], puzzles: [], share: { enabled: false }, link: null, sources: null };
+             crop: null, cropDone: false, visited: {}, count: 100, start: "scatter", edges: "round", seed: 4711, durMode: "own", textMode: "in",
+             T: { text: txFrom({}, "text"), greet: txFrom({}, "greet") }, tx: "text", music: null, tracks: [], puzzles: [], share: { enabled: false }, link: null, sources: null,
+             forWhom: "", note: "", steps: null, defaults: null, madeWith: "", madeWithText: "", quick: false };
 const P = new Puzzle($("pCanvas"));
+// Startbild in Panel 5: die Teile am Anfang mit dem transparenten Motiv, wie die Empfänger es sehen (E1, Roger 22.11.2026)
+const SP = new Puzzle($("startPrev"));
+function drawStartPrev() {
+  const has = !!(st.img && P.cfg); $("startPrev").classList.toggle("hidden", !has); $("startPrevNone").classList.toggle("hidden", has);
+  if (has && $("startPrev").clientWidth) { SP.setup({ ...P.cfg, text: "", title: "" }); SP.draw(0); }
+}
+// Vorschaubild für Messenger: dasselbe Startbild in 1200 × 630, geht beim Speichern mit
+const CARD = new Puzzle(document.createElement("canvas"), { w: 1200, h: 630 });
+function cardImage() {
+  if (!st.img || !P.cfg) return null;
+  CARD.setup({ ...P.cfg, text: "", title: "" }); CARD.draw(0); return CARD.cv.toDataURL("image/jpeg", .85);
+}
+if (window.ResizeObserver) new ResizeObserver(() => { if (P.cfg && $("startPrev").clientWidth && $("startPrev").clientWidth !== SP.vw) drawStartPrev(); }).observe($("startPrev"));
 let playing = false, last = 0;
 const audio = $("audio");
 const START_KEYS = { scatter: "p.start.scatter", heap: "p.start.heap", mix: "p.start.mix" };
@@ -857,19 +1070,21 @@ async function save() {
 }
 async function doSave() {
   const rev = st.rev, gen = st.photoGen;
-  const body = { name: $("pzName").value.trim() || st.motifName || t("u.noName"), config: config(), asset: st.asset };
+  const body = { name: $("pzName").value.trim() || st.motifName || t("u.noName"), config: config(), asset: st.asset,
+                 forWhom: $("pzFor").value.trim(), note: $("pzNote").value, steps: st.steps };
   if (st.photoDirty || !st.id) body.photo = baseCanvas().toDataURL("image/jpeg", .92);
+  try { const c = cardImage(); if (c) body.card = c; } catch (e) { /* ohne Startbild macht der Server das Vorschaubild */ }
   const p = await api("POST", st.id ? `/api/puzzles/${st.id}` : "/api/puzzles", body);
   st.id = p.id; st.link = p.link;
   if (st.photoGen === gen) st.photoDirty = false;
   if (st.rev === rev) st.dirty = false;
-  history.replaceState(null, "", "/?id=" + p.id);
+  history.replaceState(null, "", "/?id=" + p.id + location.hash);
   await loadPuzzles(); drawInfo(); drawLink();
 }
 window.addEventListener("beforeunload", e => { if (st.dirty && st.img) { save().catch(() => {}); e.preventDefault(); e.returnValue = ""; } });
 document.addEventListener("visibilitychange", () => { if (document.hidden && st.dirty) save().catch(() => {}); });
 function drawState() {
-  $("saveInfo").textContent = !st.img ? t("p.needMotif") : saving || st.dirty ? t("u.saving") : st.id ? t("u.savedAuto") : "";
+  $("saveInfo").textContent = !st.img ? "" : saving || st.dirty ? t("u.saving") : st.id ? t("u.savedAuto") : "";
   $("delRow").classList.toggle("hidden", !st.id);
   $("shareNeed").classList.toggle("hidden", !!st.img || !!st.link);
   $("shareOff").classList.toggle("hidden", st.share.enabled || !!st.link);
@@ -885,37 +1100,41 @@ function duration() {
   return clamp(+$("durSec").value || 45, 10, PUZZLE_MAXT);
 }
 function config() {
-  return { count: st.count, format: st.crop ? st.crop.fmt : "photo", seed: st.seed, start: st.start, rot: $("optRot").checked,
-           frame: $("optFrame").checked, ghost: $("optGhost").checked, T: duration(), durMode: st.durMode,
-           hold: +$("hold").value, tempo: +$("tempo").value / 100, frameAt: +$("mkRahmen").value, ramp: +$("mkRamp").value,
-           textSize: +$("mkSize").value, title: $("pzName").value.trim(), text: $("txt").value,
-           textMode: st.textMode, textFont: st.textFont, textPos: st.textPos, textColor: st.textColor,
+  return { count: st.count, format: st.crop ? st.crop.fmt : "photo", seed: st.seed, start: st.start, edges: st.edges, rot: $("optRot").checked,
+           frame: $("optFrame").checked, ghost: $("optGhost").checked, ghostPct: +$("ghostPct").value, T: duration(), durMode: st.durMode,
+           hold: +$("hold").value, tempo: +$("tempo").value / 100, frameAt: +$("mkRahmen").value, ramp: +$("mkRamp").value, lead: +$("mkLead").value,
+           title: $("pzName").value.trim(), textMode: st.textMode, ...txCfg(st.T.text, "text"), ...txCfg(st.T.greet, "greet"),
            music: st.music ? { id: st.music.id, name: st.music.name, volume: +$("vol").value / 100, fade: $("fade").checked } : null };
 }
 function applyConfig(c) {
-  st.count = c.count; st.start = c.start; st.seed = c.seed; st.durMode = c.durMode; st.textMode = c.textMode || "in"; st.textColor = c.textColor || "#ffffff";
-  st.textFont = FONTS[c.textFont] ? c.textFont : "hand"; st.textPos = textPos(c.textPos);
+  st.count = c.count; st.start = c.start; st.edges = c.edges || "round"; st.seed = c.seed; st.durMode = c.durMode; st.textMode = c.textMode || "in";
+  st.T = { text: txFrom(c, "text"), greet: txFrom(c, "greet") };
   st.crop = newCrop(c.format || "photo");
-  $("optRot").checked = !!c.rot; $("optFrame").checked = c.frame !== false; syncFrameOnly(); $("optGhost").checked = !!c.ghost;
+  $("optRot").checked = !!c.rot; $("optFrame").checked = c.frame !== false; syncFrameOnly(); $("optGhost").checked = !!c.ghost; $("ghostPct").value = String(c.ghostPct ?? 15);
   $("durSec").value = c.durMode === "own" ? Math.round(c.T) : 45;
   $("hold").value = String(clamp(Math.round(c.hold ?? 5), 2, 10)); $("tempo").value = Math.round((c.tempo ?? .5) * 100);
-  $("mkRahmen").value = c.frameAt ?? 40; $("mkRamp").value = c.ramp ?? 5; $("mkSize").value = c.textSize ?? 100;
-  $("pzName").value = c.title || ""; $("txt").value = c.text || "";
+  $("mkRahmen").value = c.frameAt ?? 40; $("mkRamp").value = c.ramp ?? 5; $("mkLead").value = c.lead ?? 1.5;
+  $("pzName").value = c.title || "";
   st.music = c.music ? (st.tracks.find(x => x.id === c.music.id) || { id: c.music.id, name: c.music.name, duration: c.durMode === "music" ? c.T : null, missing: true }) : null;
   $("vol").value = Math.round((c.music ? c.music.volume : .8) * 100); $("fade").checked = c.music ? c.music.fade : true;
-  if (CFONTS[st.textFont]) loadFont(st.textFont).then(() => rebuild(true));
+  if (CFONTS[st.T.text.font] || CFONTS[st.T.greet.font]) txFonts().then(() => rebuild(true));
   drawControls();
 }
+function fmtSec(s) { return (Math.round(s * 10) / 10).toLocaleString(lang === "de" ? "de-CH" : "en") + " s"; }
 function drawControls() {
   $("counts").querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.textContent === st.count));
   $("startPick").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.s === st.start));
+  $("edgePick").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.e === st.edges); b.setAttribute("aria-pressed", String(b.dataset.e === st.edges)); });
   setTabs($("durTabs"), "d", st.durMode); $("ownDur").classList.toggle("hidden", st.durMode !== "own");
   setTabs($("txtMode"), "m", st.textMode);
   $("durVal").textContent = $("durSec").value + " s";
   $("mkHoldV").textContent = $("hold").value + " s";
-  $("mkRahmenV").textContent = $("mkRahmen").value + " %";
-  $("mkRampV").textContent = $("mkRamp").value + " %";
-  $("mkSizeV").textContent = $("mkSize").value + " %";
+  // Rahmen und «Schneller werden ab» bleiben intern Prozent der Zeit bis «fertig», angezeigt in Sekunden (B1, 0.1.8)
+  const T = duration(), END = Math.max(T * .5, T - +$("hold").value), T0 = Math.min(+$("mkLead").value, END * .5), at = p => fmtSec(T0 + (END - T0) * p / 100);
+  $("mkLeadV").textContent = fmtSec(T0);
+  $("mkRahmenV").textContent = at(+$("mkRahmen").value);
+  $("mkRampV").textContent = at(+$("mkRamp").value);
+  $("ghostPctV").textContent = $("ghostPct").value + " %"; $("ghostOpts").classList.toggle("hidden", !$("optGhost").checked);
   $("musicOpts").classList.toggle("hidden", !st.music);
   $("musicCut").classList.toggle("hidden", !(st.durMode === "music" && st.music && st.music.duration > PUZZLE_MAXT));
   $("tmMusic").textContent = st.music ? st.music.name : t("u.noMusic");
@@ -926,10 +1145,10 @@ function drawControls() {
 // ---------- Vorschau ----------
 function baseCanvas() { if (!st.base) st.base = baseFromCrop(st.crop); return st.base; }
 function rebuild(keepT) {
-  if (!st.img) { $("pEmpty").classList.remove("hidden"); drawSteps(); return; }
+  if (!st.img) { $("pEmpty").classList.remove("hidden"); drawStartPrev(); drawSteps(); return; }
   $("pEmpty").classList.add("hidden");
   const c = puzzleConfig(config(), baseCanvas()), t0 = keepT ? P.t : 0;
-  P.setup(c); P.t = Math.min(t0, c.T); P.draw(P.t);
+  P.setup(c); P.t = Math.min(t0, c.T); P.draw(P.t); drawStartPrev();
   drawInfo(); drawChart(); syncPlayer(); drawSteps();
   if (shown.includes("P4")) drawTempo();
 }
@@ -995,37 +1214,152 @@ $("pScrub").oninput = e => { if (!P.cfg) return; P.draw(P.cfg.T * e.target.value
 $("pSpeed").onchange = () => { if (playing && audio.paused) startAudio(); };
 
 // ---------- Schritte links: Häkchen, Zusammenfassungen, Ablauf in der Vorschau ----------
-const STEP_KEYS = ["name", "motif", "crop", "music", "puzzle", "dur", "text", "share"];
-const STEP_PANEL = { name: "P27", motif: "P2", crop: "P19", music: "P26", puzzle: "P3", dur: "P4", text: "P5", share: "P7" };
+const STEP_KEYS = ["name", "motif", "crop", "music", "puzzle", "dur", "text", "view", "share"];
+const STEP_PANEL = { name: "P27", motif: "P2", crop: "P19", music: "P26", puzzle: "P3", dur: "P4", text: "P5", view: "P8", share: "P7" };
+// Schritte, die man im Panel «Puzzle Details» selber einstellen oder beim Standard lassen kann (Roger 22.11.2026, 0.1.8)
+const STEP_CHOICE = ["crop", "music", "puzzle", "dur", "text", "view"];
+const STEP_MUST = ["motif", "share"];  // immer dabei, im Panel mit grauem Häkchen
+const ALL_STEPS = () => Object.fromEntries(STEP_CHOICE.map(k => [k, true]));
+// Werkseinstellung der Schrittwahl: nur die Vorschau ist an (Roger 22.11.2026, 0.1.8)
+const FACTORY_STEPS = () => Object.fromEntries(STEP_CHOICE.map(k => [k, k === "view"]));
+const own = x => !st.steps || st.steps[x] !== false;
 function stepDone() {
   return { name: !!$("pzName").value.trim(), motif: !!st.img, crop: st.cropDone, music: !!st.music, puzzle: !!st.visited.P3,
-           dur: !!st.visited.P4, text: !!$("txt").value.trim(), share: !!st.link };
+           dur: !!st.visited.P4, text: !!(st.T.text.text.trim() || st.T.greet.text.trim()), view: !!st.visited.P8, share: !!st.link };
 }
 function drawSteps() {
-  const done = stepDone();
+  const done = stepDone(), std = x => STEP_CHOICE.includes(x) && !own(x);
   document.querySelectorAll("[data-tick]").forEach(x => x.classList.toggle("hidden", !done[x.dataset.tick]));
   $("motifNow").classList.toggle("hidden", !st.img);
   $("sumP2").textContent = st.img ? "" : t("p.needMotif");
-  const c = st.crop;
-  $("sumP19").textContent = !st.img ? "" : !c || (c.fmt === "photo" && !c.rot && c.z === 1) ? t("u.noCrop")
-    : [fmtLabel(c.fmt), ...(c.rot ? [t("u.rotated")] : []), ...(st.base ? [`${st.base.width} × ${st.base.height} px`] : [])].join(" · ");
-  $("sumP26").textContent = st.music ? st.music.name + (st.music.duration ? " · " + fmtT(st.music.duration) : "") : t("u.noMusic");
-  $("sumP3").textContent = t("u.puzzleSum", { pieces: t("p.pieces", { n: st.count }), start: t(START_KEYS[st.start] || "p.start.scatter") });
-  $("sumP4").textContent = t("u.tempoSum", { time: fmtT(duration()), tempo: $("tempo").value });
-  const txt = $("txt").value.trim().split(/\r?\n/)[0];
-  $("sumP5").textContent = txt ? `«${txt}» · ${fontLabel(st.textFont)}` : t("u.noText");
+  $("sumP19").textContent = st.img ? stepSum("crop") : "";
+  for (const [x, id] of [["music", "sumP26"], ["puzzle", "sumP3"], ["dur", "sumP4"], ["text", "sumP5"]]) $(id).textContent = stepSum(x);
+  const name = $("pzName").value.trim(), forWhom = $("pzFor").value.trim();
+  $("sumP27").textContent = [name || t("u.noNameYet"), forWhom].filter(Boolean).join(" · ");
+  for (const [x, id] of [["crop", "sumP19"], ["music", "sumP26"], ["puzzle", "sumP3"], ["dur", "sumP4"], ["text", "sumP5"]])
+    if (std(x) && $(id).textContent) $(id).textContent = t("u.stdSum", { sum: $(id).textContent });
   $("mkPvSum").textContent = P.cfg ? t("u.pvSum", { time: fmtT(P.done) }) : t("p.previewEmpty");
   $("sumP7").textContent = st.link ? (st.link.url || st.link.path) : t("u.noLinkYet");
   // Ablauf über der Vorschau
-  const n = STEP_KEYS.length, k = STEP_KEYS.filter(x => done[x]).length, next = STEP_KEYS.find(x => !done[x]);
+  // Schritt 1 zeigt den eingegebenen Namen; beim Standard gelassene Schritte sind grau mit «Standard» und zählen als erledigt
+  const label = x => x === "name" && name ? name : tp("u.k.", x);
+  const ok = x => done[x] || std(x);
+  const n = STEP_KEYS.length, k = STEP_KEYS.filter(ok).length, next = STEP_KEYS.find(x => !ok(x));
   $("mkProgN").textContent = next ? t("u.progNext", { done: k, n, next: tp("u.k.", next) }) : t("u.progress", { done: k, n });
   $("mkProgList").replaceChildren(...STEP_KEYS.map(x => {
-    const li = el("li", done[x] ? "done" : x === next ? "next" : ""), b = el("button"); b.type = "button";
-    b.append(el("span", "", tp("u.k.", x))); b.title = (done[x] ? "✓ " : "") + tp("u.k.", x);
-    b.onclick = () => x === "name" ? $("pzName").focus() : go(STEP_PANEL[x]);
+    const li = el("li", done[x] ? "done" : std(x) ? "std" : x === next ? "next" : ""), b = el("button"); b.type = "button";
+    const sp = el("span", "", label(x)); if (!done[x] && std(x)) sp.append(el("small", "", t("u.std")));
+    b.append(sp); b.title = (done[x] ? "✓ " : "") + label(x) + (!done[x] && std(x) ? " · " + t("u.std") : "");
+    b.onclick = () => go(STEP_PANEL[x]);
     li.append(b); return li;
   }));
+  drawStepPick();
 }
+
+// aktuelle Einstellung eines Schritts in einer Zeile (Ablauf links und Puzzle Details)
+function stepSum(x) {
+  const c = st.crop;
+  if (x === "motif") return st.img ? (st.motifName || t("u.k.motif")) : t("p.needMotif");
+  if (x === "crop") return !c || (c.fmt === "photo" && !c.rot && c.z === 1) ? (st.img ? t("u.noCrop") : fmtLabel(c ? c.fmt : "photo"))
+    : [fmtLabel(c.fmt), ...(c.rot ? [t("u.rotated")] : []), ...(st.base ? [`${st.base.width} × ${st.base.height} px`] : [])].join(" · ");
+  if (x === "music") return st.music ? st.music.name + (st.music.duration ? " · " + fmtT(st.music.duration) : "") : t("u.noMusic");
+  if (x === "puzzle") return t("u.puzzleSum", { pieces: t("p.pieces", { n: st.count }), start: t(START_KEYS[st.start] || "p.start.scatter") });
+  if (x === "dur") return t("u.tempoSum", { time: fmtT(duration()), tempo: $("tempo").value });
+  if (x === "text") { const s = ["greet", "text"].filter(k => st.T[k].text.trim()).map(k => tp("u.txS.", k) + ": " + txSum(k)).join(" · "); return s || t("u.noText"); }
+  if (x === "view") return P.cfg ? t("u.pvSum", { time: fmtT(P.done) }) : t("u.stdView");
+  if (x === "share") return st.link ? (st.link.url || st.link.path) : t("u.noLinkYet");
+  return "";
+}
+
+// ---------- P27 Puzzle Details ----------
+// Häkchen je Schritt mit dem Standardwert darunter. Ohne Häkchen bleibt der Schritt beim Standard
+function stepDefault(x) {
+  const c = defaultConfig();
+  if (x === "crop") return fmtLabel(c.format || "photo");
+  if (x === "music") return c.music ? c.music.name : t("u.noMusic");
+  if (x === "puzzle") return t("u.puzzleSum", { pieces: t("p.pieces", { n: c.count }), start: t(START_KEYS[c.start] || "p.start.scatter") });
+  if (x === "dur") return t("u.tempoSum", { time: fmtT(c.T), tempo: Math.round(c.tempo * 100) });
+  if (x === "view") return t("u.stdView");
+  const txt = (c.text || "").trim().split(/\r?\n/)[0];
+  return txt ? `«${txt}» · ${fontLabel(c.textFont || "hand")}` : t("u.stdText", { font: fontLabel(c.textFont || "hand") });
+}
+function drawStepPick() {
+  const box = $("pzSteps"); if (!box) return;
+  // ganzer Ablauf: Motiv und Teilen sind Pflicht (Häkchen fest), dazwischen die wählbaren Schritte
+  box.replaceChildren(...["motif", ...STEP_CHOICE, "share"].map(x => {
+    const lab = el("label"), cb = el("input"); cb.type = "checkbox";
+    if (STEP_MUST.includes(x)) {
+      cb.checked = true; cb.disabled = true; lab.className = "must";
+      const sp = el("span"); sp.append(el("strong", "", tp("u.ks.", x)), el("small", "", t("u.stepMust") + " · " + stepSum(x)));
+      lab.append(cb, sp); return lab;
+    }
+    cb.checked = own(x);
+    cb.onchange = () => { st.steps = { ...(st.steps || ALL_STEPS()), [x]: cb.checked }; touch(); };
+    const sp = el("span"); sp.append(el("strong", "", tp("u.ks.", x)), el("small", "", own(x) ? stepSum(x) : t("u.stdIs", { value: stepDefault(x) })));
+    lab.append(cb, sp); return lab;
+  }));
+}
+function drawTemplates() {
+  const sel = $("pzTpl"), items = st.puzzles.filter(p => p.id !== st.id);
+  $("pzTplRow").classList.toggle("hidden", !items.length);
+  const none = el("option", "", t("u.tplNone")); none.value = "";
+  sel.replaceChildren(none, ...items.map(p => { const o = el("option", "", p.name + (p.forWhom ? " · " + p.forWhom : "")); o.value = p.id; return o; }));
+  sel.value = items.some(p => p.id === st.tplId) ? st.tplId : "";
+}
+// Schritte, in denen die Vorlage vom Standard abweicht, bekommen ein Häkchen (Roger 22.11.2026, 0.1.8)
+const STEP_FIELDS = { crop: ["format"], puzzle: ["count", "start", "edges", "rot", "frame", "ghost", "ghostPct"], dur: ["T", "durMode", "hold", "tempo", "frameAt", "ramp", "lead"],
+                      text: ["text", "textMode", "textFont", "textPos", "textColor", "textSize", "textArc", "textRot",
+                             "greet", "greetFont", "greetSize", "greetPos", "greetColor", "greetArc", "greetRot"] };
+function tplSteps(cfg, steps) {
+  const d = defaultConfig(), same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const differs = x => x === "music" ? !same(cfg.music && cfg.music.id, d.music && d.music.id)
+    : (STEP_FIELDS[x] || []).some(f => f in cfg && !same(cfg[f], d[f]));
+  return Object.fromEntries(STEP_CHOICE.map(x => [x, x === "view" ? (steps ? steps.view !== false : own("view")) : differs(x)]));
+}
+$("pzTpl").onchange = async e => {
+  const id = e.target.value; st.tplId = id || null; if (!id) return;
+  try {
+    const p = await api("GET", `/api/puzzles/${id}`);
+    applyConfig({ ...p.config, seed: st.seed, title: $("pzName").value });
+    st.crop = newCrop(p.config.format || "photo");
+    st.steps = tplSteps(p.config || {}, p.steps);
+    if (st.img) rebuild();
+    touch(); drawSteps(); drawTextPanel(); toast(t("u.tplDone", { name: p.name }));
+  } catch (err) { fail(err); st.tplId = null; e.target.value = ""; }
+};
+$("pzFor").oninput = () => { touch(); drawTextPanel(); };
+$("pzNote").oninput = () => touch();
+// Nach der Motivwahl: zum ersten Schritt, den man selber einstellt; Schnellweg: gleich speichern und teilen
+function afterMotif() {
+  if (st.quick) { st.quick = false; quickShare(); return; }
+  const first = STEP_CHOICE.find(own);  // inkl. Vorschau
+  go(first ? STEP_PANEL[first] : "P7");
+}
+async function quickShare() {
+  st.cropDone = true;
+  if (!st.share.enabled) { go("P7"); return; }
+  try { st.dirty = true; await save(); if (!st.link) await linkCall({ download: false, days: 30 }); go("P7"); toast(t("p.linkMade")); }
+  catch (e) { fail(e); go("P7"); }
+}
+// nur die Häkchen als Standard für neue Puzzles, die Werte des Standards bleiben
+$("pzStepsDef").onclick = async () => {
+  try { await saveDefaults(defaultConfig(), { ...FACTORY_STEPS(), ...(st.steps || ALL_STEPS()) }); toast(t("u.stepsDefDone")); } catch (e) { fail(e); }
+};
+// «Als Standard» in jedem Einstellungs-Panel: nur die Werte dieses Schritts werden Standard, der Rest bleibt (Roger 22.11.2026, 0.1.8)
+const STEP_STD = { crop: "P19", music: "P26", puzzle: "P3", dur: "P4", text: "P31" };
+async function stepAsDefault(x) {
+  const cur = config(), d = defaultConfig(), fields = x === "music" ? ["music"] : STEP_FIELDS[x].filter(f => f !== "text" && f !== "greet");
+  const steps = { ...FACTORY_STEPS(), ...((st.defaults && st.defaults.steps) || {}) };
+  try { await saveDefaults({ ...d, ...Object.fromEntries(fields.map(f => [f, cur[f]])) }, steps); toast(t("u.stepStdDone", { step: tp("u.ks.", x) })); drawSteps(); }
+  catch (e) { fail(e); }
+}
+for (const [x, pno] of Object.entries(STEP_STD)) {
+  const row = document.querySelector(`[data-pno="${pno}"] .doneRow`), b = el("button", "paneStd", t("u.stepStd"));
+  b.type = "button"; b.dataset.i18n = "u.stepStd"; b.dataset.i18nTitle = "u.stepStdT"; b.title = t("u.stepStdT");
+  b.onclick = () => stepAsDefault(x); row.prepend(b);
+}
+$("pzToMotif").onclick = () => { st.quick = false; go("P2"); };
+$("pzQuick").onclick = () => { st.quick = true; go("P2"); toast(t("u.quickGo")); };
 
 // ---------- Name und Website-Titel ----------
 function webTitle() { return (st.link && st.link.own_title) || $("pzName").value.trim() || st.motifName || "Puzzle"; }
@@ -1038,6 +1372,7 @@ $("pzName").oninput = () => { touch(); drawPvTitle(); if (P.cfg) { P.cfg.title =
 $("mkWebTitle").onchange = e => { if (st.link) linkCall({ title: e.target.value.trim() }).catch(fail); };
 
 // ---------- P2 Motiv ----------
+// Nach der Motivwahl (Hochladen, Immich, Link) direkt weiter zu 3 «Motiv bearbeiten» statt zurück zum Ablauf (Roger 22.11.2026, 0.1.8)
 function setMotif(img, name, asset, src) {
   st.img = img; st.asset = asset || null; st.motifName = name || ""; st.motifSrc = src || "";
   st.crop = newCrop(st.crop ? st.crop.fmt : "photo"); st.base = null; st.cropDone = false;
@@ -1051,7 +1386,7 @@ function drawMotif(src) {
 $("uploadBtn").onclick = () => $("file").click();
 function useFile(f) {
   if (!f || !f.type.startsWith("image/")) { toast(t("p.notImage"), true); return; }
-  loadImage(URL.createObjectURL(f)).then(img => { setMotif(img, f.name.replace(/\.[^.]+$/, ""), null, t("u.uploaded")); go("CLOSE", $("sideMotif")); }).catch(fail);
+  loadImage(URL.createObjectURL(f)).then(img => { setMotif(img, f.name.replace(/\.[^.]+$/, ""), null, t("u.uploaded")); afterMotif(); }).catch(fail);
 }
 $("file").onchange = e => { useFile(e.target.files[0]); e.target.value = ""; };
 $("sideMotif").addEventListener("dragover", e => e.preventDefault());
@@ -1060,7 +1395,7 @@ async function motifFromRef() {
   const ids = $("mkMotifRef").value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi);
   if (!ids) { toast(t("u.refBad"), true); return; }
   const id = ids[ids.length - 1].toLowerCase();
-  try { setMotif(await loadImage(`/api/assets/${id}/preview`), t("u.fromLink"), id, "Immich"); $("mkMotifRef").value = ""; go("CLOSE", $("sideMotif")); } catch (e) { fail(e); }
+  try { setMotif(await loadImage(`/api/assets/${id}/preview`), t("u.fromLink"), id, "Immich"); $("mkMotifRef").value = ""; afterMotif(); } catch (e) { fail(e); }
 }
 $("mkRefApply").onclick = motifFromRef;
 $("mkMotifRef").addEventListener("keydown", e => { if (e.key === "Enter") motifFromRef(); });
@@ -1130,7 +1465,7 @@ async function openSource(x) {
 $("albUse").onclick = async () => {
   const p = im.photo, s = im.src; if (!p || !s) return;
   $("albUse").disabled = true;
-  try { setMotif(await loadImage(`/api/assets/${p.id}/preview`), s.name + (p.date ? " · " + fmtDate(p.date) : ""), p.id, "Immich"); go("CLOSE", $("sideMotif")); }
+  try { setMotif(await loadImage(`/api/assets/${p.id}/preview`), s.name + (p.date ? " · " + fmtDate(p.date) : ""), p.id, "Immich"); afterMotif(); }
   catch (e) { fail(e); } finally { $("albUse").disabled = false; }
 };
 
@@ -1226,24 +1561,29 @@ $("cropWhole").onclick = () => { draft = newCrop("photo"); drawCrop(true); };
     if (!m || !draft) return; e.preventDefault(); draft.x += m[0]; draft.y += m[1]; drawCrop();
   });
 }
-$("cropOk").onclick = () => {
+// Schritt 3: «Fertig», «Vorheriger» und «Nächster» übernehmen den Ausschnitt, × und Esc verwerfen ihn (Roger 22.11.2026, 0.1.8)
+function applyCrop() {
   if (!draft) return;
   st.crop = draft; draft = null; st.base = null; st.cropDone = true; st.photoDirty = true; st.photoGen++;
-  touch(); rebuild(); go("CLOSE", $("sideCrop"));
-};
+  touch(); rebuild();
+}
+$("cropOk").onclick = () => { applyCrop(); go("CLOSE", $("sideCrop")); };
 
 // ---------- P3 Puzzle ----------
 PUZZLE_COUNTS.forEach(n => { const b = el("button", "", String(n)); b.type = "button";
   b.onclick = () => { st.count = n; drawControls(); touch(); rebuild(); }; $("counts").append(b); });
 $("startPick").onclick = e => { const b = e.target.closest("button"); if (!b) return; st.start = b.dataset.s; drawControls(); touch(); rebuild(); };
+// Form der Teile (0.1.15): klassisch = gerade Linie bis zur Nase, weich = Form bis 0.1.14
+$("edgePick").onclick = e => { const b = e.target.closest("button"); if (!b) return; st.edges = b.dataset.e; drawControls(); touch(); rebuild(); };
 // Regler «Rahmen fertig nach» nur zeigen, wenn «Zuerst den Rahmen» an ist
 function syncFrameOnly() { const on = $("optFrame").checked; $("mkFrameOnly").classList.toggle("hidden", !on); $("mkFrameNote").classList.toggle("hidden", !on); }
-for (const id of ["optRot", "optFrame", "optGhost"]) $(id).addEventListener("change", () => { touch(); rebuild(id === "optGhost"); syncFrameOnly(); });
+for (const id of ["optRot", "optFrame", "optGhost"]) $(id).addEventListener("change", () => { touch(); rebuild(id === "optGhost"); syncFrameOnly(); drawControls(); });
+$("ghostPct").addEventListener("input", () => { touch(); rebuild(true); drawControls(); });
 $("reshuffle").onclick = () => { st.seed = Math.floor(Math.random() * 1e6); touch(); rebuild(); };
 
 // ---------- P4 Dauer und Tempo ----------
 let tempoTimer;
-for (const id of ["hold", "tempo", "mkRahmen", "mkRamp", "durSec"]) {
+for (const id of ["hold", "tempo", "mkRahmen", "mkRamp", "mkLead", "durSec"]) {
   $(id).addEventListener("input", () => { drawControls(); clearTimeout(tempoTimer); tempoTimer = setTimeout(() => rebuild(), 120); drawTempo(); });
   $(id).addEventListener("change", () => { touch(); rebuild(); });
 }
@@ -1255,7 +1595,7 @@ $("durTabs").onclick = e => {
 function curveNow() {
   if (P.cfg && P.curve) return { cv: P.curve, N: P.pieces.length };
   const [c, r] = grid(st.count, st.base ? st.base.width / st.base.height : 1.5), N = c * r;
-  return { cv: tempoCurve({ T: duration(), hold: +$("hold").value, tempo: +$("tempo").value / 100, frameAt: +$("mkRahmen").value, ramp: +$("mkRamp").value,
+  return { cv: tempoCurve({ T: duration(), hold: +$("hold").value, tempo: +$("tempo").value / 100, frameAt: +$("mkRahmen").value, ramp: +$("mkRamp").value, lead: +$("mkLead").value,
                             frame: $("optFrame").checked, N, EDGE: 2 * (c + r) - 4 }), N, EDGE: 2 * (c + r) - 4 };
 }
 function drawTempo() {
@@ -1269,6 +1609,12 @@ function drawTempo() {
   $("mkTRm").classList.toggle("hidden", cv.tR == null);
   if (cv.tR != null) $("mkTRm").style.left = pct(cv.tR);
   $("mkTFm").style.left = pct(cv.END); $("mkTZ").style.left = pct(cv.END);
+  // B2: Sekundenskala (alle 5 s, ab 30 s alle 10 s)
+  const step = T > 30 ? 10 : 5, ticks = [];
+  for (let s = 0; s <= T + 1e-9; s += step) ticks.push(s);
+  const gap = T - ticks[ticks.length - 1];
+  if (gap > step * .6) ticks.push(T); else if (gap > 1e-9) ticks[ticks.length - 1] = T;  // Ende immer beschriftet, ohne Überlappung
+  $("mkTAxis").replaceChildren(...ticks.map((s, i) => { const sp = el("span", i === 0 ? "first" : i === ticks.length - 1 && s >= T - 1e-9 ? "last" : "", Math.round(s * 10) / 10 + " s"); sp.style.left = pct(s); return sp; }));
   const stat = (k, v) => { const s = el("span"), b = el("b", "", v); s.append(k + " ", b); return s; };
   $("mkTStats").replaceChildren(stat(t("u.tDur"), fmtT(T)), stat(t("u.tDone"), fmtT(cv.END)),
     ...(cv.tR != null ? [stat(t("u.tFrame"), fmtT(cv.tR))] : []), stat(t("u.tPeak"), `${cv.peak.toFixed(1)} ${t("u.perSec")}`));
@@ -1289,7 +1635,7 @@ function fontButtons(box, keys) {
   box.replaceChildren(...keys.map(k => {
     const b = el("button", "", fontLabel(k)); b.type = "button"; b.dataset.f = k; b.setAttribute("role", "radio");
     b.style.fontFamily = FONTS[k]; b.style.fontWeight = CFONTS[k] ? "400" : "700";
-    b.onclick = () => { st.textFont = k; loadFont(k).then(() => { drawTextPanel(); rebuild(true); }); drawTextPanel(); touch(); rebuild(true); };
+    b.onclick = () => { cur().font = k; loadFont(k).then(() => { drawTextPanel(); rebuild(true); }); drawTextPanel(); touch(); rebuild(true); };
     return b;
   }));
 }
@@ -1297,34 +1643,77 @@ fontButtons($("fontSys"), Object.keys(FONTS).filter(k => !CFONTS[k]));
 fontButtons($("fontCol"), Object.keys(CFONTS));
 $("mkPos").replaceChildren(...TEXT_POS.map(p => {
   const b = el("button"); b.type = "button"; b.dataset.p = p; b.setAttribute("role", "radio"); b.append(el("i"));
-  b.onclick = () => { st.textPos = p; drawTextPanel(); touch(); rebuild(true); };
+  b.onclick = () => { cur().pos = textPos(p); drawTextPanel(); touch(); rebuild(true); };
   return b;
 }));
 TEXT_COLORS.forEach((col, i) => { const b = el("button", "col"); b.type = "button"; b.dataset.c = col; b.style.background = col;
-  b.onclick = () => { st.textColor = col; drawTextPanel(); touch(); rebuild(true); }; $("txtCol").insertBefore(b, $("txtCol").lastElementChild); b.dataset.k = COLOR_KEYS[i]; });
-$("mkColPick").addEventListener("input", e => { st.textColor = e.target.value; drawTextPanel(); });
-$("mkColPick").addEventListener("change", e => { st.textColor = e.target.value; drawTextPanel(); touch(); rebuild(true); });
+  b.onclick = () => { cur().color = col; drawTextPanel(); touch(); rebuild(true); }; $("txtCol").insertBefore(b, $("txtCol").lastElementChild); b.dataset.k = COLOR_KEYS[i]; });
+$("mkColPick").addEventListener("input", e => { cur().color = e.target.value; drawTextPanel(); });
+$("mkColPick").addEventListener("change", e => { cur().color = e.target.value; drawTextPanel(); touch(); rebuild(true); });
+// Zwei Schriftzüge mit denselben Einstellungen (C3, 0.1.8): «text» = fertiges Puzzle (Felder text*), «greet» = leerer Tisch (greet*).
+// Das Detailpanel P31 bearbeitet den in st.tx gewählten; die Regler sind nur Anzeige, die Werte stehen in st.T.
+function txFrom(c, k) {
+  return { text: c[k] || "", font: FONTS[c[k + "Font"]] ? c[k + "Font"] : "hand", size: c[k + "Size"] ?? 100, pos: textPos(c[k + "Pos"]),
+           color: c[k + "Color"] || "#ffffff", arc: c[k + "Arc"] ?? 0, rot: c[k + "Rot"] ?? 0 };
+}
+function txCfg(o, k) {
+  return { [k]: o.text, [k + "Font"]: o.font, [k + "Size"]: o.size, [k + "Pos"]: o.pos, [k + "Color"]: o.color, [k + "Arc"]: o.arc, [k + "Rot"]: o.rot };
+}
+const cur = () => st.T[st.tx];
+const txFonts = () => Promise.all([loadFont(st.T.text.font), loadFont(st.T.greet.font)]);
+function txSum(k) { const o = st.T[k], l = o.text.trim().split(/\r?\n/)[0]; return l ? `«${l}» · ${fontLabel(o.font)}` : t("u.noText"); }
+function drawTextHub() { $("sumTxGreet").textContent = txSum("greet"); $("sumTxText").textContent = txSum("text"); }
+// Vorschau mit der Engine (Bogen und Drehen kann CSS nicht): fertiges Puzzle = Motiv mit Schriftzug,
+// leerer Tisch = Startbild wie die Linkvorschau (1200 × 630) mit der Grussbotschaft
+var TP = null, tpFrame = 0;  // var: drawTextPanel kann schon vor dieser Zeile laufen
+function drawTxtPrev() {
+  cancelAnimationFrame(tpFrame);
+  tpFrame = requestAnimationFrame(() => {
+    const cv = $("mkTxtCv"), o = cur(), w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+    if (st.tx === "greet" && st.img && P.cfg) { TP = TP || new Puzzle(cv); TP.setup({ ...P.cfg, ...txCfg(o, "greet"), text: "", title: "" }); TP.draw(0); return; }
+    const dpr = window.devicePixelRatio || 1, g = cv.getContext("2d");
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = "#111"; g.fillRect(0, 0, w, h);
+    if (st.tx === "text" && st.base) g.drawImage(st.base, 0, 0, w, h);
+    drawText(g, txCfg(o, "text"), w, h, 1);
+  });
+}
 function drawTextPanel() {
-  const box = $("mkTxtBox"), out = $("mkTxtOut"), prev = $("mkTxtPrev");
-  if (st.base) { prev.style.aspectRatio = `${st.base.width}/${st.base.height}`; const u = st.base.toDataURL("image/jpeg", .7); if ($("mkTxtImg").dataset.v !== String(st.photoGen) + st.base.width) { $("mkTxtImg").src = u; $("mkTxtImg").dataset.v = String(st.photoGen) + st.base.width; } }
-  box.className = "mkTxtBox pos-" + st.textPos;
-  out.textContent = $("txt").value;
-  out.style.whiteSpace = "pre-line";
-  out.style.fontFamily = FONTS[st.textFont]; out.style.fontWeight = CFONTS[st.textFont] ? "400" : "700";
-  out.style.fontSize = ((prev.clientWidth || 300) / 16 * (+$("mkSize").value) / 100) + "px";
-  out.style.color = st.textColor;
-  out.style.textShadow = darkColor(st.textColor) ? "0 1px 4px rgba(255,255,255,.7)" : "0 1px 4px rgba(0,0,0,.7)";
-  document.querySelectorAll(".mkFont button").forEach(b => { const on = b.dataset.f === st.textFont; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
-  $("mkPos").querySelectorAll("button").forEach(b => { const on = b.dataset.p === st.textPos; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); b.title = b.ariaLabel = tp("u.p.", b.dataset.p); b.setAttribute("aria-label", tp("u.p.", b.dataset.p)); });
-  $("txtCol").querySelectorAll("button.col").forEach(b => { b.classList.toggle("on", b.dataset.c === st.textColor); b.title = tp("u.c.", b.dataset.k); b.setAttribute("aria-label", tp("u.c.", b.dataset.k)); });
-  const own = !TEXT_COLORS.includes(st.textColor);
+  const prev = $("mkTxtPrev"), o = cur(), greet = st.tx === "greet";
+  drawTextHub();
+  $("txHead").textContent = tp("u.tx.", st.tx); $("txtLbl").textContent = t(greet ? "u.greetLbl" : "p.textLbl");
+  $("txWhen").classList.toggle("hidden", greet);
+  if ($("txt").value !== o.text) $("txt").value = o.text;
+  $("mkSize").value = o.size; $("mkSizeV").textContent = o.size + " %";
+  $("mkArc").value = o.arc; $("mkArcV").textContent = String(o.arc);
+  $("mkRot").value = o.rot; $("mkRotV").textContent = o.rot + "°";
+  prev.style.aspectRatio = greet ? "1200/630" : st.base ? `${st.base.width}/${st.base.height}` : "";
+  drawTxtPrev();
+  // «Für wen / Anlass» als Vorschlag, solange kein Schriftzug steht (Roger 22.11.2026, 0.1.8)
+  const forWhom = $("pzFor").value.trim();
+  $("txtSuggest").classList.toggle("hidden", !forWhom || !!o.text.trim());
+  $("txtSuggestBtn").textContent = forWhom;
+  document.querySelectorAll(".mkFont button").forEach(b => { const on = b.dataset.f === o.font; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
+  $("mkPos").querySelectorAll("button").forEach(b => { const on = b.dataset.p === o.pos; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); b.title = b.ariaLabel = tp("u.p.", b.dataset.p); b.setAttribute("aria-label", tp("u.p.", b.dataset.p)); });
+  $("txtCol").querySelectorAll("button.col").forEach(b => { b.classList.toggle("on", b.dataset.c === o.color); b.title = tp("u.c.", b.dataset.k); b.setAttribute("aria-label", tp("u.c.", b.dataset.k)); });
+  const own = !TEXT_COLORS.includes(o.color);
   $("txtCol").querySelector(".mkCustom").classList.toggle("on", own);
-  if (own) { $("mkColPick").value = st.textColor; $("txtCol").querySelector(".mkCustom").style.background = st.textColor; }
+  if (own) { $("mkColPick").value = o.color; $("txtCol").querySelector(".mkCustom").style.background = o.color; }
   else $("txtCol").querySelector(".mkCustom").style.background = "";
 }
-let txtTimer; $("txt").oninput = () => { drawTextPanel(); touch(); clearTimeout(txtTimer); txtTimer = setTimeout(() => rebuild(true), 250); };
-$("mkSize").addEventListener("input", () => { drawControls(); });
-$("mkSize").addEventListener("change", () => { touch(); rebuild(true); });
+$("txtSuggestBtn").onclick = () => { $("txt").value = $("pzFor").value.trim(); $("txt").oninput(); };
+let txtTimer; $("txt").oninput = () => { cur().text = $("txt").value; drawTextPanel(); drawSteps(); touch(); clearTimeout(txtTimer); txtTimer = setTimeout(() => rebuild(true), 250); };
+for (const [id, key] of [["mkSize", "size"], ["mkArc", "arc"], ["mkRot", "rot"]]) {
+  $(id).addEventListener("input", () => { cur()[key] = +$(id).value; drawTextPanel(); });
+  $(id).addEventListener("change", () => { touch(); rebuild(true); });
+}
+// [>] einer Box wählt den Schriftzug; ist das Detailpanel schon offen, nur umschalten statt schliessen
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-tx]"); if (!b) return;
+  const same = st.tx === b.dataset.tx; st.tx = b.dataset.tx;
+  if (!same && stack[stack.length - 1] === "P31") { e.preventDefault(); e.stopPropagation(); drawTextPanel(); drawPanels(); }
+  else drawTextPanel();
+}, true);
 $("txtMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; st.textMode = b.dataset.m; drawControls(); touch(); rebuild(true); };
 
 // ---------- P26 Musik ----------
@@ -1338,16 +1727,20 @@ function measure(track) {  // Ohne Länge vom Server misst der Browser selbst
 }
 let previewId = null;
 function stopPreview() { if (previewId) { previewId = null; audio.pause(); drawTracks(); } }
+const OWN_DIR = "\u0000own";  // Eigene Musik als eigener Ordner zuoberst
+const trackDir = x => x.own ? OWN_DIR : (x.group || "");
+const dirName = d => d === OWN_DIR ? t("p.ownTrack") : d.split("/").pop();
+const dirParent = d => d === OWN_DIR || !d.includes("/") ? "" : d.slice(0, d.lastIndexOf("/"));
 function drawTracks() {
   const q = plain($("trackSearch").value.trim());
-  const list = st.tracks.filter(x => !q || plain(x.name + " " + x.group).includes(q)).slice(0, 150);
+  if (st.musicDir == null) st.musicDir = st.music && !st.music.missing ? trackDir(st.music) : "";
   const row = (track, label, sub, dur) => {
     const d = el("div", "track" + ((track ? st.music && st.music.id === track.id : !st.music) ? " on" : ""));
-    if (track) { const pl = el("button", "pl", previewId === track.id ? "❚❚" : "▶"); pl.type = "button"; pl.title = t("p.listen"); d.append(pl); }
-    else d.append(el("span", "nopl", "–"));
+    if (!track) d.append(el("span", "nopl", "–"));
     const n = el("span", "t", label);
     if (sub) n.append(el("small", "", sub));
     d.append(n, el("span", "d", dur ? fmtT(dur) : ""));
+    if (track) { const pl = el("button", "pl", previewId === track.id ? "❚❚" : "▶"); pl.type = "button"; pl.title = t("p.listen"); d.append(pl); }
     d.onclick = async e => {
       if (e.target.closest(".pl")) {
         if (previewId === track.id) { stopPreview(); return; }
@@ -1361,10 +1754,44 @@ function drawTracks() {
     };
     return d;
   };
-  $("tracks").replaceChildren(row(null, t("p.noMusic")), ...list.map(x => row(x, x.name, x.own ? t("p.ownTrack") : x.group, x.duration)));
+  const open = (dir, cls, icon, label, sub, arrow) => {
+    const d = el("div", "track " + cls);
+    d.append(el("span", "ic", icon));
+    const n = el("span", "t", label); if (sub) n.append(el("small", "", sub));
+    d.append(n); if (arrow) d.append(el("span", "go", "›"));
+    d.onclick = () => { st.musicDir = dir; drawTracks(); $("tracks").scrollIntoView({ block: "nearest" }); };
+    return d;
+  };
+  const rows = [];
+  if (q) {  // Suche: flach über alle Ordner, mit Ordner als Unterzeile
+    const list = st.tracks.filter(x => plain(x.name + " " + x.group).includes(q)).slice(0, 150);
+    rows.push(...list.map(x => row(x, x.name, x.own ? t("p.ownTrack") : x.group, x.duration)));
+  } else {
+    const cur = st.musicDir;
+    const known = cur === "" || cur === OWN_DIR ? true : st.tracks.some(x => trackDir(x) === cur || trackDir(x).startsWith(cur + "/"));
+    if (!known) st.musicDir = "";
+    const here = st.musicDir;
+    if (here !== "") rows.push(open(dirParent(here), "up", "‹‹", t("p.musicBack"), here === OWN_DIR ? t("p.ownTrack") : here, false));
+    const subs = new Map();  // direkte Unterordner mit Anzahl Stücke darin (auch tiefer)
+    for (const x of st.tracks) {
+      const d = trackDir(x);
+      if (here === "" && d === OWN_DIR) { subs.set(OWN_DIR, (subs.get(OWN_DIR) || 0) + 1); continue; }
+      if (d === OWN_DIR || here === OWN_DIR) continue;
+      const rest = here === "" ? d : d.startsWith(here + "/") ? d.slice(here.length + 1) : null;
+      if (rest) { const k = (here ? here + "/" : "") + rest.split("/")[0]; subs.set(k, (subs.get(k) || 0) + 1); }
+    }
+    const keys = [...subs.keys()].sort((a, b) => a === OWN_DIR ? -1 : b === OWN_DIR ? 1 : a.toLowerCase().localeCompare(b.toLowerCase()));
+    rows.push(...keys.map(k => open(k, "dir", "📁", dirName(k), (subs.get(k) === 1 ? t("p.musicCount1") : t("p.musicCount", { n: subs.get(k) })), true)));
+    rows.push(...st.tracks.filter(x => trackDir(x) === here).map(x => row(x, x.name, "", x.duration)));
+  }
+  $("noMusicBtn").classList.toggle("on", !st.music);
+  $("noMusicBtn").setAttribute("aria-pressed", String(!st.music));
+  $("tracks").replaceChildren(...rows);
   if (st.music && st.music.missing) $("tracks").append(el("p", "error", t("p.musicMissing", { name: st.music.name })));
 }
 $("trackSearch").oninput = drawTracks;
+$("noMusicBtn").onclick = () => { st.music = null; if (st.durMode === "music") st.durMode = "own"; drawControls(); touch(); rebuild(); };
+$("musicUpBtn").onclick = () => $("musicFile").click();
 $("musicFile").onchange = async e => {
   const f = e.target.files[0]; if (!f) return; e.target.value = "";
   toast(t("p.uploading"));
@@ -1375,7 +1802,7 @@ $("musicFile").onchange = async e => {
     await loadTracks();
     const track = st.tracks.find(x => x.id === data.id) || data;
     if (track.duration == null) await measure(track);
-    st.music = track; if (track.duration) st.durMode = "music";
+    st.music = track; st.musicDir = OWN_DIR; if (track.duration) st.durMode = "music";
     drawControls(); touch(); rebuild(); toast(t("p.uploaded"));
   } catch (err) { fail(err); }
 };
@@ -1389,8 +1816,10 @@ async function loadPuzzles() {
   try {
     const res = await api("GET", "/api/puzzles");
     st.puzzles = res.puzzles; st.share = { enabled: res.enabled, url: res.url, prefix: res.prefix };
+    st.defaults = res.defaults || null; st.madeWith = res.madeWith || ""; st.madeWithText = res.madeWithText || ""; st.copyright = res.copyright || ""; st.video = res.video; st.notify = res.notify || null;
   } catch (e) { fail(e); }
-  drawPuzzles(); drawState(); loadShares();
+  drawPuzzles(); drawState(); loadShares(); drawTemplates();
+  if (shown.includes("P11")) drawDefaults();
 }
 function drawPuzzles() {
   const items = st.puzzles;
@@ -1401,7 +1830,7 @@ function drawPuzzles() {
     const row = el("div", "hist" + (p.id === puzzleDetailId ? " on" : "")); row.dataset.id = p.id; row.dataset.name = plain(p.name || "");
     const img = el("img"); img.alt = ""; img.loading = "lazy"; img.src = p.thumb;
     const open = el("button", "open"); open.type = "button"; open.setAttribute("aria-pressed", String(p.id === puzzleDetailId));
-    const sub = [t("p.pieces", { n: p.count }), fmtT(p.T), fmtDate(p.updated * 1000), p.link ? (p.link.active && !p.link.expired ? t("p.linked") : t("p.linkOff")) : ""].filter(Boolean).join(" · ");
+    const sub = [p.forWhom, t("p.pieces", { n: p.count }), fmtT(p.T), fmtDate(p.updated * 1000), p.link ? (p.link.active && !p.link.expired ? t("p.linked") : t("p.linkOff")) : ""].filter(Boolean).join(" · ");
     open.append(el("strong", "", p.name + (p.id === st.id ? " ✎" : "")), el("span", "histSub", sub));
     open.onclick = () => setPuzzleDetail(p.id);
     const del = el("button", "danger", t("u.delete")); del.type = "button";
@@ -1498,7 +1927,7 @@ function drawPuzzleDetail() {
     ...(puzzleDetail ? [[t("pz.music"), c.music ? c.music.name : t("p.noMusic")]] : []),
     ...(c.text ? [[t("u.text"), c.text.replace(/\s*\n\s*/g, " / ") + " · " + fontLabel(c.textFont || "hand")]] : []),
     [t("pz.link"), status + (l && l.protected ? " · " + t("sh.protected") : "")],
-    ...(l ? [[t("pz.valid"), l.expires_at ? fmtDate(l.expires_at * 1000) : t("sh.unlimited")], [t("pz.views"), shareViews(l)]] : [])]);
+    ...(l ? [[t("pz.valid"), l.expires_at ? fmtDate(l.expires_at * 1000) : t("sh.unlimited")], [t("pz.views"), shareViews(l)], [t("pz.likes"), "♥ " + t("sh.likes", { n: l.likes || 0 })]] : [])]);
   $("pzLinkBox").classList.toggle("hidden", !l);
   if (l) $("pzUrl").textContent = l.url || l.path;
 }
@@ -1509,24 +1938,50 @@ $("pzReuse").onclick = async () => {
   dStop(); await save().catch(fail); resetEditor();
   applyConfig({ ...c, seed: st.seed, title: "" });
   st.crop = newCrop(c.format || "photo");
-  drawSteps(); go("P2"); toast(t("u.reused"));
+  if (puzzleDetail.steps) st.steps = { ...ALL_STEPS(), ...puzzleDetail.steps };
+  drawSteps(); go("P27"); toast(t("u.reused"));
+  $("pzName").focus();  // zuerst den Namen, jetzt im Panel «Puzzle Details» (Roger 22.11.2026, 0.1.8)
+};
+async function saveDefaults(config, steps) {
+  const res = await api("POST", "/api/settings/defaults", { defaults: config ? { config, steps: steps || ALL_STEPS() } : null });
+  st.defaults = res.defaults; drawDefaults(); drawStepPick();
+}
+$("pzStd").onclick = async () => {
+  const c = puzzleDetail && puzzleDetail.config; if (!c || !confirm(t("pz.asDefaultAsk"))) return;
+  try { await saveDefaults(c, puzzleDetail.steps); toast(t("pz.asDefaultDone")); } catch (e) { fail(e); }
 };
 $("pzDel").onclick = () => deletePuzzle(puzzleDetailId);
 $("pzUrlCopy").onclick = () => { const p = st.puzzles.find(x => x.id === puzzleDetailId); if (p && p.link) copyText(p.link.url || p.link.path); };
 $("pzToShares").onclick = () => { const id = puzzleDetailId; shareFilterValue = "all"; shareDetailId = id; go("P10"); };
 window.addEventListener("resize", () => { if (DP.cfg && shown.includes("P23")) { DP.resize(); dSync(); } });
+// Handy Hoch/Quer: «resize» kommt auf iOS, bevor das Canvas die neue Grösse hat; neu messen, sobald sie stimmt (Roger 22.11.2026)
+if (window.ResizeObserver) {
+  const refit = (pz, after) => () => { const c = pz.cv; if (pz.cfg && c.clientWidth && c.clientHeight && (c.clientWidth !== pz.vw || c.clientHeight !== pz.vh)) { pz.resize(); after(); } };
+  new ResizeObserver(refit(P, () => drawChart())).observe($("pCanvas"));
+  new ResizeObserver(refit(DP, () => dSync())).observe($("pzCanvas"));
+}
 
 // ---------- Neu, öffnen ----------
+// Werkseinstellung; ein in den Einstellungen gespeicherter Standard gilt davor (Roger 22.11.2026, 0.1.8)
+const FACTORY = { count: 100, format: "photo", start: "scatter", edges: "round", rot: false, frame: true, ghost: false, ghostPct: 15, T: 45, durMode: "own", hold: 5,
+                  tempo: .5, frameAt: 40, ramp: 5, textSize: 100, text: "", textMode: "in", textFont: "hand", textPos: "mc", textColor: "#ffffff", textArc: 0, textRot: 0,
+                  greet: "", greetFont: "hand", greetSize: 100, greetPos: "mc", greetColor: "#ffffff", greetArc: 0, greetRot: 0, music: null };
+function defaultConfig() { return { ...FACTORY, ...((st.defaults && st.defaults.config) || {}) }; }
+function applyDefaults() {
+  applyConfig({ ...defaultConfig(), seed: st.seed, title: $("pzName").value, text: st.T.text.text, greet: st.T.greet.text });
+  st.steps = { ...FACTORY_STEPS(), ...((st.defaults && st.defaults.steps) || {}) };
+  drawSteps(); drawTextPanel();
+}
 function resetEditor() {
   playing = false; stopAudio(); stopPreview();
   Object.assign(st, { id: null, img: null, base: null, asset: null, motifName: "", motifSrc: "", photoDirty: false, dirty: false, link: null,
-                      cropDone: false, visited: {}, seed: Math.floor(Math.random() * 1e6) });
-  applyConfig({ count: 100, format: "photo", start: "scatter", rot: false, frame: true, ghost: false, seed: st.seed, T: 45, durMode: "own", hold: 5,
-                tempo: .5, frameAt: 40, ramp: 5, textSize: 100, title: "", text: "", textMode: "in", textFont: "hand", textPos: "mc", textColor: "#ffffff", music: null });
+                      cropDone: false, visited: {}, tplId: null, seed: Math.floor(Math.random() * 1e6) });
+  $("pzName").value = ""; st.T.text.text = st.T.greet.text = ""; $("pzFor").value = ""; $("pzNote").value = ""; st.quick = false;
+  applyDefaults();
   $("motifImg").removeAttribute("src");
   P.cfg = null; const g = $("pCanvas").getContext("2d"); g.clearRect(0, 0, $("pCanvas").width, $("pCanvas").height);
   $("pEmpty").classList.remove("hidden"); $("stats").replaceChildren(); $("gridInfo").textContent = ""; drawChart(); syncPlayer();
-  history.replaceState(null, "", "/"); drawPuzzles(); drawState(); drawPvTitle(); drawTextPanel();
+  history.replaceState(null, "", "/" + location.hash); drawPuzzles(); drawState(); drawPvTitle(); drawTextPanel();
 }
 async function openPuzzle(id) {
   await save().catch(fail);
@@ -1536,14 +1991,16 @@ async function openPuzzle(id) {
     const img = await loadImage(p.photo);
     st.id = p.id; st.asset = p.asset; st.link = p.link; st.motifName = p.name; st.motifSrc = "";
     applyConfig(p.config);
-    st.img = img; st.base = null; st.photoDirty = false; st.dirty = false; st.cropDone = true; st.visited = { P3: true, P4: true };
+    $("pzFor").value = p.forWhom || ""; $("pzNote").value = p.note || ""; st.steps = p.steps ? { ...ALL_STEPS(), ...p.steps } : null;
+    st.img = img; st.base = null; st.photoDirty = false; st.dirty = false; st.cropDone = true; st.visited = { P3: true, P4: true, P8: true };
     drawMotif(p.photo);
-    history.replaceState(null, "", "/?id=" + p.id);
-    if (CFONTS[st.textFont]) await loadFont(st.textFont);
+    history.replaceState(null, "", "/?id=" + p.id + location.hash);
+    await txFonts();
     rebuild(); drawPuzzles(); drawLink(); drawState(); drawTextPanel();
   } catch (e) { fail(e); }
 }
-$("newBtn").onclick = async () => { await save().catch(fail); resetEditor(); go("HOME"); };
+// «Neues Puzzle» öffnet gleich Schritt 1 «Puzzle Details» (Roger 22.11.2026, 0.1.8)
+$("newBtn").onclick = async () => { await save().catch(fail); resetEditor(); go("P27"); };
 $("delBtn").onclick = () => deletePuzzle(st.id);
 
 // ---------- P7 Teilen ----------
@@ -1553,11 +2010,14 @@ function drawLink() {
   const l = st.link; if (!l) return;
   $("linkTxt").textContent = linkUrl();
   if (document.activeElement !== $("mkWebTitle")) $("mkWebTitle").value = l.own_title ? l.title : "";
-  $("lkActive").checked = l.active; $("lkPw").checked = l.protected; $("lkDl").checked = l.download; $("lkMeta").checked = l.metadata;
+  $("lkActive").checked = l.active; $("lkPw").checked = l.protected; $("lkDl").checked = l.download; $("lkMeta").checked = l.metadata; $("lkVid").checked = !!l.video;
+  // Video getrennt vom Foto (0.1.17): Schalter nur mit eingeschaltetem Hauptschalter (oder wenn der Link ihn schon hat).
+  // Im Kiosk ist st.video kein Objekt: dort steuert kiosk.js die Zeile.
+  if (st.video && typeof st.video === "object") $("lkVidRow").classList.toggle("hidden", !st.video.enabled && !l.video);
   $("pwRow").classList.add("hidden");
-  const days = l.days === "until" ? "until" : String(l.days ?? 0);
-  $("lkDays").value = [...$("lkDays").options].some(o => o.value === days) ? days : "until";
+  drawValidity("lk", l);
   const state = [];
+  if (l.pending && l.valid_from) state.push(t("sh.from", { date: fmtDate(l.valid_from * 1000) }));
   if (!l.active) state.push(t("p.state.off"));
   if (l.expired) state.push(t("p.state.expired"));
   else if (l.expires_at) state.push(t("p.state.until", { date: fmtDate(l.expires_at * 1000) }));
@@ -1579,8 +2039,38 @@ $("mkLink").onclick = async () => {
 };
 $("lkActive").onchange = e => linkCall({ active: e.target.checked }).catch(err => { fail(err); drawLink(); });
 $("lkDl").onchange = e => linkCall({ download: e.target.checked }).catch(err => { fail(err); drawLink(); });
+$("lkVid").onchange = e => linkCall({ video: e.target.checked }).catch(err => { fail(err); drawLink(); });
 $("lkMeta").onchange = e => linkCall({ metadata: e.target.checked }).catch(err => { fail(err); drawLink(); });
-$("lkDays").onchange = e => { if (e.target.value === "until") return; linkCall({ days: +e.target.value }).catch(err => { fail(err); drawLink(); }); };
+function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+// Gültig ab / Gültig bis (D2, Roger 22.11.2026), gleich in P7 (Präfix lk) und P10 (sh): jeder Link hat ein «ab» (Standard heute);
+// «bis» als Auswahl wie in der Liste, darunter das Datum: berechnet aus ab + Tage, bei «bis Datum…» editierbar, bei «unbegrenzt» nur der Text
+function drawValidity(p, l) {
+  const from = $(p + "From"), sel = $(p + "Days"), until = $(p + "Until");
+  if (!sel.options.length) daysSelect(sel);
+  if (document.activeElement !== from) from.value = l.valid_from ? isoDay(new Date(l.valid_from * 1000)) : isoDay(new Date());
+  const days = l.days === "until" ? "until" : String(l.days ?? 0);
+  sel.value = [...sel.options].some(o => o.value === days) ? days : "until";
+  showUntil(p);
+  if (document.activeElement !== until) until.value = l.expires_at ? isoDay(new Date(l.expires_at * 1000)) : "";
+}
+function showUntil(p) {
+  const sel = $(p + "Days"), until = $(p + "Until"), today = isoDay(new Date()), from = $(p + "From").value;
+  until.classList.toggle("hidden", sel.value === "0"); $(p + "None").classList.toggle("hidden", sel.value !== "0");
+  until.disabled = sel.value !== "until";
+  until.min = from > today ? from : today;
+}
+function bindValidity(p, call) {
+  const from = $(p + "From"), sel = $(p + "Days"), until = $(p + "Until");
+  from.onchange = () => { if (from.value) call({ from: from.value }); };
+  sel.onchange = () => {
+    showUntil(p);
+    if (sel.value !== "until") { call(daysBody(sel.value)); return; }
+    if (!until.value || until.value < until.min) until.value = until.min;  // bisheriges Ende übernehmen, danach editierbar
+    call({ until: until.value }); until.focus();
+  };
+  until.onchange = () => { if (until.value) call({ until: until.value }); };
+}
+bindValidity("lk", body => linkCall(body).catch(err => { fail(err); drawLink(); }));
 $("lkPw").onchange = e => {
   if (e.target.checked) { $("pwRow").classList.remove("hidden"); $("pwInput").focus(); return; }
   $("pwRow").classList.add("hidden");
@@ -1593,14 +2083,33 @@ $("rmLink").onclick = async () => {
   try { const p = await api("DELETE", `/api/puzzles/${st.id}/link`); st.link = p.link; drawLink(); loadPuzzles(); } catch (e) { fail(e); }
 };
 $("cpy").onclick = () => copyText(linkUrl());
-$("waBtn").onclick = () => {
-  const title = webTitle();
-  window.open("https://wa.me/?text=" + encodeURIComponent(t("p.waText", { title }) + "\n" + linkUrl()), "_blank", "noopener");
+// WhatsApp (Roger 22.11.2026: wa.me in einem neuen Fenster blieb leer): Handy öffnet die App direkt, ohne Zwischenseite;
+// fehlt sie, nach 1,5 s die Webseite von WhatsApp. Computer: api.whatsapp.com über einen echten Link (öffnet WhatsApp oder Web)
+$("waBtn").onclick = () => sendWhatsApp(webTitle(), linkUrl());
+function sendWhatsApp(title, url) {  // auch für P10 Details eines Links (Roger 22.11.2026)
+  const text = encodeURIComponent(t("p.waText", { title }) + "\n" + url);
+  if (matchMedia("(pointer:coarse)").matches) {
+    const left = () => { clearTimeout(tm); removeEventListener("pagehide", left); };
+    const tm = setTimeout(() => { removeEventListener("pagehide", left); if (document.visibilityState === "visible") location.href = "https://api.whatsapp.com/send?text=" + text; }, 1500);
+    addEventListener("pagehide", left);
+    location.href = "whatsapp://send?text=" + text;
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = "https://api.whatsapp.com/send?text=" + text; a.target = "_blank"; a.rel = "noopener noreferrer";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+// Teilen-Menü des Geräts (D3, Roger 22.11.2026); ohne Web Share API (z. B. Firefox am Computer) bleibt der Knopf weg
+$("shareBtn").classList.toggle("hidden", !navigator.share);
+$("shareBtn").onclick = () => {
+  navigator.share({ title: webTitle(), text: t("p.waText", { title: webTitle() }), url: linkUrl() })
+    .catch(e => { if (e && e.name !== "AbortError") copyText(linkUrl()); });
 };
 async function loadShareSetup() { await loadShares(); drawSettings(); }
 
 // ---------- P9 Geteilte Puzzles, P10 Details eines Links ----------
 let shares = null, shareFilterValue = "all", shareDetailId = null;
+const sharePicked = new Set(); let shareShown = [], sharePickLast = null;  // Auswahl für Mehrfachaktionen (0.1.8)
 const SHARE_DAYS = [["today", "sh.today"], ["1", "sh.tomorrow"], ["7", "sh.d7"], ["30", "sh.d30"], ["60", "sh.d60"], ["90", "sh.d90"], ["365", "sh.y1"], ["0", "sh.unlimitedOpt"], ["until", "sh.untilDate"]];
 const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const shareLive = s => !s.expired && s.active !== false;  // «Aktiv» ohne ausgeschaltete (Entscheid 48)
@@ -1618,8 +2127,8 @@ function shareViews(s) {
   return t("sh.views", { n: s.views, date: fmtDate(s.last_viewed_at * 1000, { dateStyle: "medium", timeStyle: "short" }) });
 }
 function shareFacts(s) {
-  return [t("sh.created", { date: fmtDate(s.created_at * 1000) }), shareValidity(s), shareViews(s),
-          ...(s.protected ? [t("sh.protected")] : []), ...(s.download ? [t("sh.download")] : []), ...(s.metadata === false ? [t("sh.noMeta")] : [])];
+  return [t("sh.created", { date: fmtDate(s.created_at * 1000) }), shareValidity(s), shareViews(s), ...(s.likes ? [t("sh.likes", { n: s.likes })] : []),
+          ...(s.protected ? [t("sh.protected")] : []), ...(s.download ? [t("sh.download")] : []), ...(s.video ? [t("sh.video")] : []), ...(s.metadata === false ? [t("sh.noMeta")] : [])];
 }
 const factEl = text => el("span", "shareFacts", text);
 function daysBody(value, until) {  // Wert der Auswahl → Body für den Link, null wenn das Datum fehlt
@@ -1643,8 +2152,11 @@ function drawSharesSum() {
     : !shares.length ? t("sh.noneSum") : t("sh.sum", { n: active.length, views: t("sh.viewsSum", { n: views }) });
 }
 function shareRow(s) {
-  const row = el("div", "shareRow" + (s.expired ? " expired" : "") + (s.active === false ? " off" : "") + (s.id === shareDetailId && shown.includes("P10") ? " on" : ""));
+  const row = el("div", "shareRow" + (s.expired ? " expired" : "") + (s.active === false ? " off" : "") + (s.id === shareDetailId && shown.includes("P10") ? " on" : "") + (sharePicked.has(s.id) ? " picked" : ""));
   row.dataset.id = s.id;
+  const pick = el("input", "sharePick"); pick.type = "checkbox"; pick.checked = sharePicked.has(s.id);
+  pick.setAttribute("aria-label", t("sh.pick") + ": " + s.title);
+  pick.onclick = ev => pickShare(ev, s.id);
   const thumb = el("img"); thumb.alt = ""; thumb.loading = "lazy"; thumb.src = s.thumb;
   thumb.addEventListener("error", () => thumb.remove());
   const main = el("div", "shareMain"), head = el("div", "shareTitle");
@@ -1680,8 +2192,39 @@ function shareRow(s) {
   del.onclick = () => deleteShare(s);
   actions.append(open, days, until, del);
   main.append(head, ...shareFacts(s).map(factEl), activeRow, actions);
-  row.append(thumb, main);
+  row.append(pick, thumb, main);
   return row;
+}
+function pickShare(ev, id) {  // Häkchen; Shift-Klick wählt von–bis wie in Smart Albums
+  const on = ev.target.checked, i = shareShown.indexOf(id), k = shareShown.indexOf(sharePickLast);
+  (ev.shiftKey && i >= 0 && k >= 0 ? shareShown.slice(Math.min(i, k), Math.max(i, k) + 1) : [id]).forEach(x => on ? sharePicked.add(x) : sharePicked.delete(x));
+  sharePickLast = id; drawShares();
+}
+function drawShareBar() {
+  const n = sharePicked.size, all = shareShown.length > 0 && shareShown.every(x => sharePicked.has(x));
+  $("sharePickAll").classList.toggle("hidden", !shareShown.length);
+  $("shareAll").checked = all;
+  $("shareAll").indeterminate = !all && shareShown.some(x => sharePicked.has(x));
+  $("shareBar").classList.toggle("hidden", !n);
+  $("shareBarN").textContent = t("sh.picked", { n });
+  $("shareRun").disabled = !$("shareAct").value;
+}
+async function runShareAction() {
+  const ids = [...sharePicked], n = ids.length;
+  if ($("shareAct").value !== "delete" || !n || !confirm(t("sh.bulkDelConfirm", { n }))) return;
+  $("shareRun").disabled = true;
+  let done = 0;
+  for (const id of ids) {
+    try {
+      const p = await api("DELETE", `/api/puzzles/${id}/link`, {});
+      if (st.id === id) { st.link = p.link; drawLink(); }
+      sharePicked.delete(id); done++;
+    } catch (e) { fail(e); break; }
+  }
+  if (shareDetailId && ids.includes(shareDetailId) && shown.includes("P10")) go("CLOSE", $("sideShare"));
+  if (!sharePicked.size) $("shareAct").value = "";
+  if (done) toast(t("sh.bulkDeleted", { n: done }));
+  await loadPuzzles();
 }
 async function deleteShare(s) {
   if (!confirm(t("sh.delConfirm", { title: s.title }))) return;
@@ -1696,15 +2239,20 @@ function drawShares() {
     b.classList.toggle("on", b.dataset.filter === shareFilterValue);
     b.setAttribute("aria-pressed", String(b.dataset.filter === shareFilterValue));
   });
-  $("sharesPurge").classList.toggle("hidden", !counts.expired);
-  const list = shares.filter(s => shareFilterValue === "all" || (shareFilterValue === "expired" ? s.expired : shareLive(s)));
+  sharePicked.forEach(id => { if (!shares.some(s => s.id === id)) sharePicked.delete(id); });  // gelöschte fallen aus der Auswahl
+  const q = $("shareSearch").value.trim().toLowerCase();  // Suche über Titel, Puzzle-Name und Adresse (0.1.8)
+  const hit = s => !q || [s.title, s.name, s.url].some(v => (v || "").toLowerCase().includes(q));
+  const list = shares.filter(s => (shareFilterValue === "all" || (shareFilterValue === "expired" ? s.expired : shareLive(s))) && hit(s));
+  shareShown = list.map(s => s.id); drawShareBar();
   if (!list.length) {
     const p = el("p", "muted"); p.style.margin = "0";
     p.textContent = !shares.length ? (st.share.enabled ? t("sh.empty") : t("p.shareOff"))
+      : q ? t("sh.noMatch", { q: $("shareSearch").value.trim() })
       : t(shareFilterValue === "expired" ? "sh.noneExpired" : "sh.noneActive");
     $("shareList").replaceChildren(p);
   } else $("shareList").replaceChildren(...list.map(shareRow));
-  drawShareDetail();
+  drawShareDetail(); drawStatsRows();
+  if (shown.includes("P29")) drawStats();
 }
 async function loadShares() {
   try {
@@ -1715,15 +2263,140 @@ async function loadShares() {
   drawShares(); drawState();
 }
 document.querySelectorAll("#shareFilter button").forEach(b => b.addEventListener("click", () => { shareFilterValue = b.dataset.filter; drawShares(); }));
-$("sharesPurge").onclick = async () => {
-  const n = (shares || []).filter(s => s.expired).length;
-  if (!n || !confirm(t("sh.purgeConfirm", { n }))) return;
-  try {
-    await api("DELETE", "/api/shares/expired");
-    if (st.id && st.link && st.link.expired) { st.link = (await api("GET", `/api/puzzles/${st.id}`)).link; drawLink(); }
-    await loadPuzzles();
-  } catch (e) { fail(e); }
+$("shareSearch").oninput = () => drawShares();
+$("shareAll").onchange = e => { shareShown.forEach(x => e.target.checked ? sharePicked.add(x) : sharePicked.delete(x)); drawShares(); };
+$("shareAct").onchange = () => drawShareBar();
+$("shareRun").onclick = () => runShareAction();
+$("shareBarX").onclick = () => { sharePicked.clear(); $("shareAct").value = ""; drawShares(); };
+// ---------- P29 Zugriffe ----------
+// Wie «Zugriffs-Statistik» in Smart Albums: Total, Tage mit Aufrufen, Aufrufe pro Tag (neueste zuerst), Suche von/bis.
+// «Alle Links» zählt alle bestehenden Links zusammen (gelöschte fallen weg) und zeigt die Links nach Aufrufen im Zeitraum.
+let statsLink = "all";
+const statsDay = d => fmtDate(new Date(d + "T00:00"), { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+function drawStatsRows() {
+  const all = (shares || []).reduce((sum, s) => sum + (s.views || 0), 0);
+  $("sharesStatsN").textContent = all ? t("st.opened", { n: all }) : t("st.never");
+  const s = detail();
+  if (!s) return;
+  $("shStatsN").textContent = (s.views ? t("st.opened", { n: s.views }) : t("st.never")) + " · ♥ " + t("sh.likes", { n: s.likes || 0 });
+  $("shStatsLast").textContent = s.last_viewed_at ? t("st.last", { date: fmtDate(s.last_viewed_at * 1000, { dateStyle: "medium", timeStyle: "short" }) }) : "";
+}
+// ---------- Protokoll (P30, Vorlage Smart Albums): wann, wer, was, die letzten 2000 Einträge ----------
+let LOG = [], logKeep = 2000;
+const logKey = (...p) => ["log", ...p].join(".");  // Schlüssel aus dem Protokoll-Code
+const logWho = e => e.who || t(logKey("role", e.role || "system"));
+function logWhat(e) {
+  const v = { ...(e.vars || {}) };
+  if (Array.isArray(v.changes)) v.changes = v.changes.map(c => t(logKey("f", ...c.split(":")))).join(", ");
+  if ("url" in v && !v.url) v.url = t("log.urlDefault");
+  return t(logKey(e.what), v);
+}
+const logNorm = x => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+async function loadLog() {
+  try { const r = await api("GET", "/api/protocol"); LOG = r.entries || []; logKeep = r.keep || logKeep; } catch (e) { fail(e); }
+  const s = $("logWho"), cur = s.value, names = [...new Set(LOG.map(logWho))].sort((a, b) => a.localeCompare(b));
+  s.replaceChildren(new Option(t("log.allWho"), ""), ...names.map(n => new Option(n, n)));
+  s.value = names.includes(cur) ? cur : "";
+  drawLog();
+}
+function logRows() {
+  const w = $("logWho").value, q = logNorm($("logQ").value).split(/\s+/).filter(Boolean);
+  return LOG.filter(e => {
+    if (w && logWho(e) !== w) return false;
+    const hay = logNorm([fmtDate(e.when, { dateStyle: "medium", timeStyle: "short" }), e.when, logWho(e), logWhat(e), e.item].join(" "));
+    return q.every(x => hay.includes(x));
+  });
+}
+function drawLog() {
+  $("logIntro").textContent = t("log.intro", { n: fmt(logKeep) });
+  const L = logRows();
+  $("logN").textContent = L.length === LOG.length ? t("log.count", { n: LOG.length }) : t("log.countOf", { n: L.length, all: LOG.length });
+  const tb = $("logBody");
+  if (!L.length) { const tr = el("tr"), td = el("td", "muted", t(LOG.length ? "log.none" : "log.empty")); td.colSpan = 3; tr.append(td); tb.replaceChildren(tr); return; }
+  tb.replaceChildren(...L.slice(0, 500).map(e => {
+    const tr = el("tr"), what = el("td", "", logWhat(e));
+    if (e.item) what.append(" ", el("span", "logItem", "· " + e.item));
+    tr.append(el("td", "", fmtDate(e.when, { dateStyle: "medium", timeStyle: "short" })), el("td", "", logWho(e)), what);
+    return tr;
+  }));
+  if (L.length > 500) { const tr = el("tr"), td = el("td", "muted", t("log.more", { n: L.length - 500 })); td.colSpan = 3; tr.append(td); tb.append(tr); }
+}
+$("logQ").oninput = drawLog;
+$("logWho").onchange = drawLog;
+$("logCsv").onclick = () => {
+  // Formeln entschärfen (CSV-Injection): Zellen mit = + - @ Tab CR am Anfang bekommen ein '
+  const cell = x => { if (/^[=+\-@\t\r]/.test(x)) x = "'" + x; return /[";\n\r]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+  const rows = [[t("log.colWhen"), t("log.colWho"), t("log.colWhat"), t("log.colItem")]]
+    .concat(logRows().map(e => [e.when, logWho(e), logWhat(e), e.item || ""]));
+  const blob = new Blob(["\ufeff" + rows.map(r => r.map(x => cell(String(x))).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = el("a"); a.href = URL.createObjectURL(blob); a.download = "puzzle-protokoll.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
+
+function drawStats() {
+  if (!shares) { $("stOut").replaceChildren(factEl(t("src.loading"))); return; }
+  if (statsLink !== "all" && !shares.some(x => x.id === statsLink)) statsLink = "all";
+  const one = statsLink === "all" ? null : shares.find(x => x.id === statsLink);
+  $("stTitle").textContent = one ? t("st.titleOne", { name: one.title }) : t("st.titleAll");
+  $("stLink").replaceChildren(new Option(t("st.allLinks"), "all"), ...shares.map(x => new Option(x.title, x.id)));
+  $("stLink").value = statsLink;
+  const from = $("stFrom").value, to = $("stTo").value, range = !!(from || to);
+  const inRange = d => (!from || d >= from) && (!to || d <= to);
+  const links = one ? [one] : shares;
+  const days = new Map(); let total = 0, dated = 0, since = "", last = 0;
+  for (const x of links) {
+    total += x.views || 0; last = Math.max(last, x.last_viewed_at || 0);
+    for (const d of x.view_days || []) {
+      dated += d.views; if (!since || d.date < since) since = d.date;
+      if (inRange(d.date)) days.set(d.date, (days.get(d.date) || 0) + d.views);
+    }
+  }
+  const list = [...days].sort((a, b) => a[0] < b[0] ? 1 : -1), inSum = list.reduce((sum, d) => sum + d[1], 0);
+  const undated = Math.max(0, total - dated), nodate = range ? 0 : undated;
+  const tile = (v, label) => { const d = el("div"); d.append(el("b", "", fmt(v)), label); return d; };
+  const tiles = el("div", "stTiles");
+  tiles.append(tile(total, t("st.total")), range ? tile(inSum, t("st.inRange")) : tile(list.length, t("st.daysWith")),
+               tile(links.reduce((sum, x) => sum + (x.likes || 0), 0), t("st.likes")));  // Likes gesamt, ohne Datum (Roger 22.11.2026)
+  const note = [last ? t("st.lastView", { date: fmtDate(last * 1000, { dateStyle: "medium", timeStyle: "short" }) }) : "",
+                since ? (undated ? t("st.sinceUndated", { date: statsDay(since), n: undated }) : t("st.since", { date: statsDay(since) }))
+                  : total ? t("st.oldOnly") : "", t("st.keep")].filter(Boolean).join(" ");
+  const out = [tiles, el("p", "muted", note)];
+  if (!one && shares.length) {  // Rangliste: Link – Aufrufe im Zeitraum, meistgesehen zuerst; Klick filtert auf den Link
+    const rank = shares.map(x => [x, range ? (x.view_days || []).filter(d => inRange(d.date)).reduce((sum, d) => sum + d.views, 0) : x.views || 0])
+      .sort((a, b) => b[1] - a[1] || a[0].title.localeCompare(b[0].title));
+    const tb = el("tbody"); tb.id = "stRank";
+    for (const [x, n] of rank) {
+      const tr = el("tr"); tr.tabIndex = 0; tr.title = t("st.filterTo", { name: x.title });
+      const pick = () => { statsLink = x.id; drawStats(); };
+      tr.onclick = pick; tr.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
+      tr.append(el("td", "", x.title), el("td", "n" + (n ? "" : " zero"), fmt(n)));
+      tb.append(tr);
+    }
+    const table = el("table", "mkAlb"), head = el("tr");
+    head.append(el("th", "", t("st.colLink")), el("th", "n", t(range ? "st.colInRange" : "st.colViews")));
+    const th = el("thead"); th.append(head); table.append(th, tb);
+    out.push(el("h3", "paneSection", t("st.rank")), table);
+  }
+  if (list.length || nodate) {
+    const max = Math.max(1, ...list.map(d => d[1])), table = el("table", "mkAlb stDays"), head = el("tr"), tb = el("tbody");
+    head.append(el("th", "", t("st.colDay")), el("th", "n", t("st.colCount")), el("th"));
+    for (const [d, n] of list) {
+      const tr = el("tr"), bar = el("td", "bar"), sp = el("span"); sp.style.width = Math.round(n / max * 100) + "%"; bar.append(sp);
+      tr.append(el("td", "", statsDay(d)), el("td", "n", fmt(n)), bar); tb.append(tr);
+    }
+    if (nodate) { const tr = el("tr"), c = el("td", "zero", t("st.noDate")); c.title = t("st.noDateHint"); tr.append(c, el("td", "n", fmt(nodate)), el("td")); tb.append(tr); }
+    const th = el("thead"); th.append(head); table.append(th, tb);
+    out.push(el("h3", "paneSection", t("st.perDay")), table);
+  } else out.push(el("p", "muted", t(range ? "st.noneRange" : total ? "st.noDays" : "st.none")));
+  $("stOut").replaceChildren(...out);
+}
+$("stLink").onchange = e => { statsLink = e.target.value; drawStats(); };
+$("stFrom").onchange = $("stTo").onchange = $("stSearch").onclick = () => drawStats();
+$("stAllDays").onclick = () => { $("stFrom").value = $("stTo").value = ""; drawStats(); };
+const openStats = id => { statsLink = id; $("stFrom").value = $("stTo").value = ""; };  // neu geöffnet: alle Tage; danach öffnet data-go P29
+$("sharesStats").onclick = $("hmViews").onclick = () => openStats("all");
+$("shStats").onclick = () => openStats(shareDetailId || "all");
+
 function drawShareDetail() {
   if (!shareDetailId || !shares) return;
   const s = shares.find(x => x.id === shareDetailId);
@@ -1736,13 +2409,12 @@ function drawShareDetail() {
   $("shFacts").replaceChildren(...shareFacts(s).map(factEl));
   $("shActive").checked = s.active !== false; $("shActive").disabled = s.expired;
   $("shPw").checked = s.protected || !$("shPwRow").classList.contains("hidden");
-  $("shDl").checked = s.download; $("shMeta").checked = s.metadata !== false;
-  daysSelect($("shDays"));
-  const days = s.expired ? "" : s.days === "until" ? "until" : String(s.days ?? 0);
-  $("shDays").value = days;
-  if (days === "until" && s.expires_at) { const d = new Date(s.expires_at * 1000); $("shUntil").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; $("shUntil").classList.remove("hidden"); }
+  $("shDl").checked = s.download; $("shMeta").checked = s.metadata !== false; $("shVid").checked = !!s.video;
+  $("shVidRow").classList.toggle("hidden", !(st.video && st.video.enabled) && !s.video);
+  drawValidity("sh", s);
   $("shOpen").disabled = s.expired || !s.url || s.active === false;
   $("shOpen").title = s.url ? "" : t("sh.noUrl");
+  $("shWa").classList.toggle("hidden", !shareLive(s) || !s.url);  // nur aktive, gültige Links mit Adresse
 }
 const detail = () => shares && shares.find(x => x.id === shareDetailId);
 const detailCall = body => { const s = detail(); return s ? shareCall(s.id, "POST", body).catch(e => { fail(e); drawShareDetail(); }) : Promise.resolve(); };
@@ -1750,13 +2422,9 @@ $("shCopy").onclick = () => { const s = detail(); if (s) copyText(s.url || s.pat
 $("shWebTitle").onchange = e => detailCall({ title: e.target.value.trim() });  // Leer = wieder der Name des Puzzles
 $("shActive").onchange = e => detailCall({ active: e.target.checked });
 $("shDl").onchange = e => detailCall({ download: e.target.checked });
+$("shVid").onchange = e => detailCall({ video: e.target.checked });
 $("shMeta").onchange = e => detailCall({ metadata: e.target.checked });
-$("shDays").onchange = e => {
-  if (e.target.value === "until") { $("shUntil").min = isoToday(); $("shUntil").classList.remove("hidden"); $("shUntil").focus(); return; }
-  $("shUntil").classList.add("hidden");
-  if (e.target.value !== "") detailCall(daysBody(e.target.value));
-};
-$("shUntil").onchange = e => { if (e.target.value) detailCall({ until: e.target.value }); };
+bindValidity("sh", detailCall);
 $("shPw").onchange = e => {
   if (e.target.checked) { $("shPwRow").classList.remove("hidden"); $("shPwInput").focus(); return; }
   $("shPwRow").classList.add("hidden");
@@ -1769,6 +2437,7 @@ $("shPwSet").onclick = () => {
 };
 $("shPwInput").addEventListener("keydown", e => { if (e.key === "Enter") $("shPwSet").click(); });
 $("shOpen").onclick = () => { const s = detail(); if (s && s.url) window.open(s.url, "_blank", "noopener"); };
+$("shWa").onclick = () => { const s = detail(); if (s && s.url) sendWhatsApp(s.title, s.url); };
 $("shEdit").onclick = async () => { const s = detail(); if (s) { await openPuzzle(s.id); go("HOME"); } };
 $("shDel").onclick = () => { const s = detail(); if (s) deleteShare(s); };
 about.onChangelog = () => go(about.changelogOpen ? "CLOSE" : "P13", $("sideChangelog"));
@@ -1778,6 +2447,88 @@ about.saveShareUrl = async url => {  // Einstellung «Adresse der Live-Links»
   toast(t("p.saved")); loadShares();
   if (st.id && st.link) { try { st.link = (await api("GET", `/api/puzzles/${st.id}`)).link; drawLink(); } catch {} }
 };
+
+// ---------- P11 Standard für neue Puzzles, «Erstellt mit» ----------
+function defSteps() { const d = st.defaults; return { ...FACTORY_STEPS(), ...((d && d.steps) || {}) }; }
+function drawDefaults() {
+  const c = defaultConfig(), d = st.defaults;
+  const steps = defSteps();
+  gridRows($("defFacts"), [
+    [t("p.count"), t("p.pieces", { n: c.count })],
+    [t("p.startLbl"), t(START_KEYS[c.start] || "p.start.scatter")],
+    [t("p.edgesLbl"), t(c.edges === "classic" ? "p.edges.classic" : "p.edges.round")],
+    [t("u.format"), fmtLabel(c.format || "photo")],
+    [t("pz.length"), fmtT(c.T)],
+    [t("pz.music"), c.music ? c.music.name : t("p.noMusic")],
+    [t("u.fonts"), fontLabel(c.textFont || "hand")]]);
+  // Häkchen: welche Schritte ein neues Puzzle zum selber Einstellen vorschlägt (Roger 22.11.2026, 0.1.8)
+  $("defSteps").replaceChildren(...["motif", ...STEP_CHOICE, "share"].map(x => {
+    const lab = el("label"), cb = el("input"); cb.type = "checkbox";
+    const sp = el("span"); sp.append(el("strong", "", tp("u.ks.", x)), el("small", "", STEP_MUST.includes(x) ? t("u.stepMust") : t("u.stdIs", { value: stepDefault(x) })));
+    if (STEP_MUST.includes(x)) { cb.checked = true; cb.disabled = true; lab.className = "must"; }
+    else {
+      cb.checked = steps[x];
+      cb.onchange = async () => {
+        try { await saveDefaults(c, { ...defSteps(), [x]: cb.checked }); toast(t("u.stepsDefDone")); } catch (e) { fail(e); cb.checked = !cb.checked; }
+      };
+    }
+    lab.append(cb, sp); return lab;
+  }));
+  $("defSrc").textContent = d ? t("set.defOwn") : t("set.defFactory");
+  $("defReset").disabled = !d;
+  if (document.activeElement !== $("madeWithUrl")) $("madeWithUrl").value = st.madeWith;
+  if (document.activeElement !== $("madeWithText")) $("madeWithText").value = st.madeWithText;
+  drawVideoSet(); drawNtfySet();
+  $("copyFixed").textContent = st.copyright ? t("set.copyFixed", { text: `© ${new Date().getFullYear()} by ${st.copyright}` }) : t("set.copyNone");
+}
+$("defFromCur").onclick = async () => {
+  if (!confirm(t("pz.asDefaultAsk"))) return;
+  try { await saveDefaults(config(), st.steps); toast(t("pz.asDefaultDone")); } catch (e) { fail(e); }
+};
+$("defReset").onclick = async () => {
+  if (!confirm(t("set.defResetAsk"))) return;
+  try { await saveDefaults(null); toast(t("set.defResetDone")); } catch (e) { fail(e); }
+};
+$("madeSave").onclick = async () => {
+  $("madeErr").classList.add("hidden");
+  try { const res = await api("POST", "/api/settings/made-with", { url: $("madeWithUrl").value.trim(), text: $("madeWithText").value.trim() }); st.madeWith = res.madeWith; st.madeWithText = res.madeWithText; $("madeWithUrl").value = st.madeWith; $("madeWithText").value = st.madeWithText; toast(t("set.madeDone")); }
+  catch (e) { $("madeErr").textContent = e.message; $("madeErr").classList.remove("hidden"); }
+};
+// Hauptschalter Video-Download (0.1.17): Stand vom Render-Container (läuft er, wartend, fertig, Speicher)
+function drawVideoSet() {
+  const v = st.video && typeof st.video === "object" ? st.video : null;
+  $("videoOn").checked = !!(v && v.enabled);
+  $("videoState").textContent = !v ? "" : !v.enabled ? t("set.videoOff")
+    : (v.alive ? t("set.videoAlive") : t("set.videoDead")) + " · " + t("set.videoNums", { q: v.queued, n: v.videos, mb: v.mb, max: v.maxMb });
+}
+$("videoOn").onchange = async e => {
+  try { st.video = await api("POST", "/api/settings/video", { enabled: e.target.checked }); toast(t("set.madeDone")); }
+  catch (err) { fail(err); }
+  drawVideoSet();
+};
+["madeWithUrl", "madeWithText"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("madeSave").click(); }));
+// Meldungen über ntfy (0.1.18): Ziel nur aus dem Stack; je Art ein Schalter (speichert sofort), Uhrzeit, Test und «Jetzt senden».
+// Im Kiosk-Admin fehlt st.notify (der Kiosk hat seine eigene Box), dann bleibt der Abschnitt versteckt.
+function drawNtfySet() {
+  const N = st.notify, nt = (N && N.ntfy) || {};
+  $("ntfySet").classList.toggle("hidden", !N);
+  if (!N) return;
+  $("ntfyState").textContent = nt.ready ? t(nt.token ? "set.ntfyReady" : "set.ntfyReadyNoToken", { url: nt.url, topic: nt.topic }) : t("set.ntfyOff");
+  ["ntfyErrors", "ntfySummary"].forEach(id => { $(id).checked = !!N[$(id).dataset.kind]; $(id).disabled = !nt.ready; });
+  if (document.activeElement !== $("ntfyTime")) $("ntfyTime").value = N.time || "08:00";
+  $("ntfyTime").disabled = $("ntfyTest").disabled = $("ntfyNow").disabled = !nt.ready;
+  const L = nt.last, when = L && fmtDate(L.when, { dateStyle: "short", timeStyle: "short" });
+  $("ntfyLast").textContent = !L ? "" : L.ok ? t("set.ntfyLast", { when, title: L.title }) : t("set.ntfyLastFail", { when, error: L.error });
+}
+async function postNtfy(url, body, msg) {
+  try { st.notify = await api("POST", url, body); toast(t(msg)); } catch (e) { fail(e); }
+  drawNtfySet();
+}
+["ntfyErrors", "ntfySummary"].forEach(id => { $(id).onchange = () => postNtfy("/api/settings/notify", { [$(id).dataset.kind]: $(id).checked }, "set.madeDone"); });
+$("ntfyTime").onchange = () => { if ($("ntfyTime").value) postNtfy("/api/settings/notify", { time: $("ntfyTime").value }, "set.madeDone"); };
+[["ntfyTest", "test"], ["ntfyNow", "summary"]].forEach(([id, what]) => {
+  $(id).onclick = async () => { $(id).disabled = true; await postNtfy(`/api/settings/notify/${what}`, {}, "set.ntfySent"); };
+});
 
 // ---------- P28 Willkommen ----------
 let appVersion = null;
@@ -1850,24 +2601,28 @@ loadFamily();
 // Ein Ziel mit Eltern-Panel hängt sich an dessen Kette, sonst ersetzt es den Stapel. Ist der Stapel leer, steht rechts
 // die Vorschau (mit Motiv) oder die Willkommensseite. Die Vorschau steht nur, solange kein Panel der zweiten Ebene offen ist
 // (Roger 21.11.2026, 0.1.4).
-const PARENT = { P10: "P9", P13: "P12", P23: "P22", P24: "P2", P25: "P24" };
-const ALIAS = { history: "P22", shares: "P9", share: "P10", settings: "P11", about: "P12", changelog: "P13", other: "P21" };
+const PARENT = { P31: "P5", P10: "P9", P29: "P9", P13: "P12", P23: "P22", P24: "P2", P25: "P24" };
+const ALIAS = { log: "P30", history: "P22", shares: "P9", share: "P10", settings: "P11", about: "P12", changelog: "P13", other: "P21" };
 let stack = [], shown = [], homeY = 0;
 const panelOf = id => document.querySelector(`.mkP[data-pno="${id}"]`);
 const ENTER = {
   P9: () => { drawShares(); loadShares(); },
   P10: () => { $("shPwRow").classList.add("hidden"); $("shPwInput").value = ""; $("shUntil").classList.add("hidden"); drawShareDetail(); drawShares(); },
-  P11: () => { drawSettings(); loadShareSetup(); },
+  P29: () => { drawStats(); if (!shares) loadShares(); },
+  P11: () => { drawSettings(); loadShareSetup(); drawDefaults(); },
   P12: () => drawImmichStatus(),
+  P30: () => loadLog(),
   P13: () => { about.changelogOpen = true; drawChangelog(); drawAbout(); },
   P24: () => loadSources(),
   P19: () => openCrop(),
-  P5: () => drawTextPanel(),
+  P5: () => drawTextHub(),
+  P31: () => drawTextPanel(),
   P4: () => { st.visited.P4 = true; drawSteps(); drawTempo(); },
   P3: () => { st.visited.P3 = true; drawSteps(); },
-  P8: () => { if (P.cfg) { P.resize(); drawChart(); } },
+  P8: () => { st.visited.P8 = true; drawSteps(); if (P.cfg) { P.resize(); drawChart(); } },
   P22: () => drawPuzzles(),
   P28: () => drawWelcome(),
+  P27: () => { drawTemplates(); drawStepPick(); },
 };
 const LEAVE = {
   P13: () => { about.changelogOpen = false; drawAbout(); },
@@ -1880,7 +2635,10 @@ function go(target, from) {
   target = ALIAS[target] || target;
   const oldStack = stack.slice();
   if (target === "P19" && !st.img) { toast(t("p.needMotif")); target = "P2"; }
+  if (from && from.closest && from.closest("#sideCrop") && from.matches(".stepPrev, .stepNext")) applyCrop();
   if (target === "HOME") stack = [];
+  // Aus einem Panel heraus geöffnet (Musik aus 6): rechts anhängen, «Fertig» führt zurück (Roger 22.11.2026, 0.1.8)
+  else if (from && from.dataset && from.dataset.stack === "push" && !stack.includes(target)) stack = stack.concat(target);
   else if (target === "CLOSE") {
     const p = from && from.closest ? from.closest(".mkP") : null, i = p ? stack.indexOf(p.dataset.pno) : -1;
     stack = i >= 0 ? stack.slice(0, i) : p && (p.dataset.pno === "P8" || p.dataset.pno === "P28") ? [] : stack.slice(0, -1);
@@ -1893,9 +2651,38 @@ function go(target, from) {
       stack = k >= 0 ? stack.slice(0, stack.indexOf(chain[k]) + 1).concat(chain.slice(k + 1)) : chain;
     }
   }
+  showStack(oldStack, target, from, true);
+}
+function showStack(oldStack, target, from, push) {
+  if (stack.includes("P26") && !oldStack.includes("P26")) { st.musicDir = null; drawTracks(); }
   slide(oldStack, target, from);
   drawPanels();
+  if (push) syncUrl();
 }
+// Offene Panels stehen in der Adresse (#P4/P26): Neu laden bleibt im Panel, Browser vor/zurück geht durch die Panels
+// (Roger 22.11.2026, 0.1.8). Panels, die eine Auswahl brauchen (Link-, Puzzle-, Album-Details), stellt die Adresse nicht wieder her.
+const NO_RESTORE = ["P10", "P23", "P25"];
+let navReady = false;
+function syncUrl() {
+  if (!navReady) return;
+  const h = stack.length ? "#" + stack.join("/") : "";
+  if (h !== location.hash) history.pushState(null, "", location.pathname + location.search + h);
+}
+function stackFromUrl() {
+  const out = [];
+  for (const id of decodeURIComponent(location.hash.slice(1)).split("/").filter(Boolean)) {
+    if (!panelOf(id) || NO_RESTORE.includes(id) || (id === "P19" && !st.img)) break;
+    out.push(id);
+  }
+  return out;
+}
+addEventListener("popstate", () => {
+  if (!navReady) return;
+  const oldStack = stack.slice(); stack = stackFromUrl();
+  const back = stack.length < oldStack.length && oldStack.slice(0, stack.length).every((x, i) => x === stack[i]);
+  showStack(oldStack, back ? "CLOSE" : stack[stack.length - 1] || "HOME", null, false);
+  if (location.hash !== (stack.length ? "#" + stack.join("/") : "")) history.replaceState(null, "", location.pathname + location.search + (stack.length ? "#" + stack.join("/") : ""));
+});
 // Handy: Panels gleiten seitwärts (Roger 21.11.2026, 0.1.6)
 let slideIn = null;
 function slide(oldStack, target, from) {
@@ -1911,10 +2698,10 @@ function slide(oldStack, target, from) {
   slideIn = newTop ? { id: newTop, back } : null;
 }
 // Schritt-Panels: unten «‹ Vorheriger · Nächster › · Fertig» (Roger 21.11.2026, 0.1.6); Motiv bearbeiten behält Abbrechen/Übernehmen
-const STEP_ORDER = ["P2", "P19", "P26", "P3", "P4", "P5", "P8", "P7"];
+const STEP_ORDER = ["P27", "P2", "P19", "P26", "P3", "P4", "P5", "P8", "P7"];
 function stepNav() {
   STEP_ORDER.forEach((id, i) => {
-    const row = id === "P19" ? null : panelOf(id).querySelector(":scope > .doneRow");
+    const row = panelOf(id).querySelector(":scope > .doneRow");
     if (!row) return;
     let prev = row.querySelector(".stepPrev"), next = row.querySelector(".stepNext");
     if (!prev) {
@@ -1958,7 +2745,15 @@ function drawPanels() {
   const bs = document.body.style;
   if (phone && deep && !wasDeep) { homeY = y0; bs.position = "fixed"; bs.left = bs.right = "0"; bs.top = -homeY + "px"; }
   document.body.classList.toggle("deep", deep);
-  if (!deep && wasDeep && bs.position === "fixed") { bs.position = bs.left = bs.right = bs.top = ""; scrollTo(0, homeY); }
+  if (!deep && wasDeep && bs.position === "fixed") {
+    bs.position = bs.left = bs.right = bs.top = ""; scrollTo(0, homeY);
+    // Mit Vorheriger/Nächster durch mehrere Schritte: zum Kasten des zuletzt offenen Schritts, nicht an die alte Stelle (Roger 22.11.2026, 0.1.8)
+    const lastTop = before.filter(id => id !== "P28").pop();
+    const box = lastTop && document.querySelector(`.mkStep .paneBtn[data-go="${lastTop}"]`);
+    // Kasten oben hinstellen und nach der Ausfahr-Animation nochmals: iPhone stand sonst beim nächsten Schritt (Musik statt Motiv bearbeiten, Roger 22.11.2026, 0.1.8)
+    if (box) { const k = box.closest(".box"), put = () => scrollTo(0, Math.max(0, k.getBoundingClientRect().top + scrollY - 12));
+      put(); requestAnimationFrame(put); setTimeout(put, 320); }
+  }
   stepNav();
   if (slideIn) {
     const p = panelOf(slideIn.id); p.classList.remove("pzIn", "fromL"); void p.offsetWidth;
@@ -1986,6 +2781,17 @@ document.addEventListener("click", e => {
   else if (b.id === "familyBtn" && stack.includes("P21")) go("HOME");
   else go(target, b);
 });
+/* Ganze Box öffnet ihr Panel (Roger 23.11.2026, 0.1.14): ein Klick in eine Box mit [>] im Kopf, in eine Karte unter «Geteilte Puzzles»
+   oder in «Änderungen» unter «Über» wirkt wie der Klick auf das [>] (nochmals: zu). Bedienelemente darin behalten ihren eigenen Klick.
+   Die Box wird kein Knopf: Tastatur und Screenreader nutzen weiter das [>]. Gilt auch im Kiosk (gleiche Seite). */
+function boxLead(box) { return box.querySelector(":scope > .boxHead > .paneBtn, :scope > .clBoxHead > .paneBtn, :scope .shareTitle > .paneBtn"); }
+document.addEventListener("click", e => {
+  if (e.defaultPrevented || !(e.target instanceof Element)) return;
+  if (e.target.closest('a,button,input,label,select,textarea,summary,[contenteditable]:not([contenteditable="false"])')) return;
+  const box = e.target.closest("section.box, .clBox, .shareRow"), lead = box && boxLead(box);
+  if (!lead || lead.disabled || String(getSelection()).trim()) return;  // markierter Text: nicht öffnen
+  lead.click();
+});
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape" || !stack.length || (e.target.closest && e.target.closest("input,textarea,select"))) return;
   go("CLOSE", panelOf(stack[stack.length - 1]));
@@ -1993,15 +2799,20 @@ document.addEventListener("keydown", e => {
 
 // ---------- Start ----------
 let wasPhone = matchMedia("(max-width:860px)").matches;  // Handy ↔ Computer: Startseite mit oder ohne Vorschau
-window.addEventListener("resize", () => { setBarH(); const ph = matchMedia("(max-width:860px)").matches; if (ph !== wasPhone) { wasPhone = ph; drawPanels(); } if (P.cfg && shown.includes("P8")) { P.resize(); drawChart(); } if (shown.includes("P5")) drawTextPanel(); });
-onLang(() => { drawControls(); drawInfo(); drawPuzzles(); drawFamily(); drawState(); if (st.link) drawLink(); drawChart(); drawSources(); if (shares) drawShares(); drawWelcome(); drawPanels(); if (shown.includes("P19")) drawCrop(); if (shown.includes("P4")) drawTempo(); });
+window.addEventListener("resize", () => { setBarH(); const ph = matchMedia("(max-width:860px)").matches; if (ph !== wasPhone) { wasPhone = ph; drawPanels(); } if (P.cfg && shown.includes("P8")) { P.resize(); drawChart(); } if (shown.includes("P31")) drawTextPanel(); });
+onLang(() => { drawControls(); drawInfo(); drawPuzzles(); drawFamily(); drawState(); if (st.link) drawLink(); drawChart(); drawSources(); if (shares) drawShares(); drawWelcome(); if (shown.includes("P29")) drawStats(); drawPanels(); if (shown.includes("P19")) drawCrop(); if (shown.includes("P4")) drawTempo(); });
 applyI18n();
+const startId = new URLSearchParams(location.search).get("id");  // vor resetEditor lesen, das die Adresse leert: sonst verlor Neuladen das Puzzle
 resetEditor();
 drawPanels();
 (async () => {
   await Promise.all([loadPuzzles(), loadTracks()]);
-  const id = new URLSearchParams(location.search).get("id");
-  if (id) { await openPuzzle(id); drawPanels(); }
+  if (startId) { await openPuzzle(startId); drawPanels(); }
+  else if (!st.img) applyDefaults();
+  const fromUrl = stackFromUrl();
+  if (fromUrl.length) { const old = stack.slice(); stack = fromUrl; showStack(old, fromUrl[fromUrl.length - 1], null, false); }
+  history.replaceState(null, "", location.pathname + location.search + (stack.length ? "#" + stack.join("/") : ""));
+  navReady = true;
 })();
 </script>
 </body>

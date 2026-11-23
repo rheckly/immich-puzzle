@@ -1,5 +1,6 @@
 """Grundtest von Puzzle: Server mit Immich-Attrappe, Puzzle speichern, Live-Link mit Passwort, Download und Musik."""
 import base64
+import datetime
 import io
 import json
 import os
@@ -109,9 +110,23 @@ class PuzzleServerTest(unittest.TestCase):
         self.assertEqual((c["format"], c["tempo"], c["hold"], c["frameAt"], c["ramp"]), ("4:3", 1.6, 8, 20, 60))
         self.assertEqual((c["textSize"], c["textFont"], c["textPos"], c["textColor"]), (150, "luckiest", "br", "#abcdef"))
         self.assertEqual(server.clean_config({"textPos": "bottom"})["textPos"], "bc")  # Puzzles bis 0.1.2
+        for v in (None, "", "mid"):  # leer, null oder alt: Mitte, auch bei der Grussbotschaft (0.1.9)
+            c = server.clean_config({"textPos": v, "greetPos": v})
+            self.assertEqual((c["textPos"], c["greetPos"]), ("mc", "mc"))
+        with self.assertRaises(ValueError):
+            server.clean_config({"greetPos": "xx"})
+        self.assertEqual(server.clean_config({})["ghostPct"], 15)  # Deckkraft des Motivs beim Start (E1)
+        self.assertEqual(server.clean_config({"ghost": True, "ghostPct": 40})["ghostPct"], 40)
+        # Bogen und Drehen (C1, C2), Grussbotschaft auf dem leeren Tisch (C3)
+        c = server.clean_config({})
+        self.assertEqual((c["textArc"], c["textRot"], c["greet"], c["greetFont"], c["greetPos"], c["greetColor"]), (0, 0, "", "hand", "mc", "#ffffff"))
+        c = server.clean_config({"greet": "Hallo  Welt", "greetArc": -40, "greetRot": 30, "textArc": 100, "textRot": -45, "greetColor": "#ff8800"})
+        self.assertEqual((c["greet"], c["greetArc"], c["greetRot"], c["textArc"], c["textRot"], c["greetColor"]), ("Hallo Welt", -40, 30, 100, -45, "#ff8800"))
         for bad in ({"count": 7}, {"format": "5:4"}, {"T": 999}, {"hold": 1}, {"hold": 11}, {"tempo": 3},
                     {"frameAt": 10}, {"ramp": 61}, {"textSize": 300}, {"textFont": "x"}, {"textPos": "top-left"},
-                    {"textColor": "red"}, {"textColor": "#12345"}, {"count": True}, {"music": "x"}):
+                    {"textColor": "red"}, {"textColor": "#12345"}, {"count": True}, {"music": "x"}, {"ghostPct": 4}, {"ghostPct": 61},
+                    {"textArc": 101}, {"textRot": -46}, {"greetArc": -101}, {"greetRot": 46}, {"greet": 5}, {"greetColor": "gold"},
+                    {"greetFont": "x"}, {"greetSize": 20}):
             with self.assertRaises(ValueError, msg=bad):
                 server.clean_config(bad)
 
@@ -130,12 +145,83 @@ class PuzzleServerTest(unittest.TestCase):
         status, _ = self.call("POST", self.base + "/api/puzzles", {"config": {"count": 24}})
         self.assertEqual(status, 400)  # neues Puzzle ohne Foto
 
+    def test_card_from_editor(self):
+        """Das Startbild aus dem Editor wird das Vorschaubild; Unbrauchbares wird übergangen."""
+        p = self.new_puzzle()
+        card = lambda: Image.open(io.BytesIO(self.call("GET", f"{self.base}/api/puzzles/{p['id']}/card.jpg", raw=True)[1]))
+        status, _ = self.call("POST", f"{self.base}/api/puzzles/{p['id']}", {"config": p["config"], "card": photo_url(1200, 630).replace("jpeg", "png", 1)})
+        self.assertEqual(status, 200)
+        img = card()
+        self.assertEqual(img.size, (1200, 630))
+        self.assertGreater(img.convert("RGB").getpixel((5, 5))[0], 150)  # die Farbe des gesendeten Bildes, kein Server-Puzzle
+        status, _ = self.call("POST", f"{self.base}/api/puzzles/{p['id']}", {"config": p["config"], "card": photo_url(600, 600)})
+        self.assertEqual(card().size, (1200, 630))  # auf das Vorschauformat zugeschnitten
+        for bad in ("x", "data:image/png;base64,AAAA", 5):
+            self.assertIsNone(server.decode_card(bad), bad)
+        status, _ = self.call("POST", f"{self.base}/api/puzzles/{p['id']}", {"config": p["config"], "card": "kaputt"})
+        self.assertEqual(status, 200)
+
+    def test_set_active_off_since(self):
+        link = {}
+        server.set_active(link, False)
+        first = link["off_since"]
+        self.assertIs(link["active"], False)
+        server.set_active(link, False)  # erneut aus: «seit» bleibt
+        self.assertEqual(link["off_since"], first)
+        server.set_active(link, True)
+        self.assertEqual(link, {})
+
+    def test_protocol(self):
+        """Protokoll (0.1.8): erstellen, ändern (zusammengefasst), Link neu/geändert/aufgerufen/gelöscht, Smart Albums"""
+        start = len(self.app.log)
+        p = self.new_puzzle(title="Protokoll")
+        pid = p["id"]
+        for title in ("A", "B"):  # zweimal speichern = ein Eintrag «geändert»
+            self.call("POST", f"{self.base}/api/puzzles/{pid}", {"config": {"count": 48, "format": "3:2", "title": title}})
+        _, linked = self.call("POST", f"{self.base}/api/puzzles/{pid}/link", {"days": 30})
+        self.call("POST", f"{self.base}/api/puzzles/{pid}/link", {"download": True})
+        path = linked["link"]["url"].split("links.example.com", 1)[1]
+        views = lambda: sum(e["what"] == "linkView" for e in self.app.log)
+        before = views()
+        self.call("GET", self.sbase + path, raw=True)
+        for _ in range(100):  # der Aufruf zählt erst nach der Antwort (eigener Thread des Servers)
+            if views() > before:
+                break
+            time.sleep(.02)
+        server.set_actor("smart", "Smart Albums")
+        try:
+            self.app.patch_share(self.app.puzzles[pid]["online_link"]["token"], {"active": False}, "https://app")
+        finally:
+            server.set_actor("system")
+        self.call("DELETE", f"{self.base}/api/puzzles/{pid}/link")
+        status, log = self.call("GET", self.base + "/api/protocol")
+        self.assertEqual(status, 200, log)
+        self.assertEqual(log["keep"], 2000)
+        mine = list(reversed(log["entries"]))[start:]
+        whats = [e["what"] for e in mine]
+        self.assertEqual(whats, ["puzzleNew", "puzzleEdit", "linkNew", "linkEdit", "linkView", "linkEdit", "linkDelete"], whats)
+        self.assertEqual(mine[-4]["vars"]["changes"], ["download:on"])
+        self.assertEqual(mine[-2]["vars"]["changes"], ["active:off"])
+        self.assertEqual((mine[-2]["role"], mine[-2]["who"]), ("smart", "Smart Albums"))
+        self.assertEqual(mine[-3]["role"], "visitor")
+        self.assertEqual(mine[-1]["role"], "admin")
+        with open(os.path.join(self.tmp, "data", "protocol.jsonl"), encoding="utf-8") as f:
+            self.assertEqual(len(f.read().splitlines()), len(log["entries"]))
+
     def test_live_link(self):
         p = self.new_puzzle()
         status, p = self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"download": False, "days": 30})
         self.assertEqual(status, 200, p)
         link = p["link"]
         self.assertTrue(link["url"].startswith("https://links.example.com/puzzles/"))
+        # D2: jeder Link hat ein «Gültig ab» (Standard heute), «bis» zählt ab diesem Tag
+        today = datetime.date.today()
+        self.assertEqual(datetime.date.fromtimestamp(link["valid_from"]), today)
+        self.assertEqual(datetime.date.fromtimestamp(link["expires_at"]), today + datetime.timedelta(days=30))
+        start = today + datetime.timedelta(days=10)
+        _, moved = self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"from": start.isoformat()})
+        self.assertEqual(datetime.date.fromtimestamp(moved["link"]["expires_at"]), start + datetime.timedelta(days=30))
+        self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"from": today.isoformat()})
         path = link["url"].split("links.example.com", 1)[1]
         status, page = self.call("GET", self.sbase + path, raw=True)
         self.assertEqual(status, 200)
@@ -194,6 +280,81 @@ class PuzzleServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIsNone(p["link"])
 
+    def test_shares_view_days(self):
+        """Zugriffs-Statistik: die Link-Liste liefert die Tageswerte, neueste zuerst, höchstens das Total (0.1.8)"""
+        p = self.new_puzzle()
+        self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"days": 30})
+        today = time.strftime("%Y-%m-%d")
+        old = time.strftime("%Y-%m-%d", time.localtime(time.time() - 400 * 86400))
+        with self.app.lock:
+            link = self.app.puzzles[p["id"]]["online_link"]
+            link["views"] = 7
+            link["view_days"] = {"2026-01-02": 2, today: 3, old: 9}
+        status, res = self.call("GET", self.base + "/api/shares")
+        entry = next(s for s in res["shares"] if s["id"] == p["id"])
+        days = entry["view_days"]
+        self.assertEqual(entry["views"], 7)
+        self.assertEqual(days[0], {"date": today, "views": 3})
+        self.assertNotIn(old, [d["date"] for d in days])  # älter als ein Jahr fällt weg
+        self.assertLessEqual(sum(d["views"] for d in days), 7)
+
+    def test_like(self):
+        """Like auf der Seite der Empfänger: ein Like pro Besucher, zurücknehmbar, Zahl für alle (0.1.8)"""
+        p = self.new_puzzle()
+        status, p = self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"days": 30})
+        url = self.sbase + p["link"]["path"]
+        a, b = {"X-Visitor": "aaaaaaaaaaaa"}, {"X-Visitor": "bbbbbbbbbbbb"}
+        self.assertEqual(self.call("POST", url + "like", {"on": True}, a), (200, {"likes": 1, "liked": True}))
+        self.assertEqual(self.call("POST", url + "like", {"on": True}, a)[1], {"likes": 1, "liked": True})  # nur einmal
+        self.assertEqual(self.call("POST", url + "like", {"on": True}, b)[1], {"likes": 2, "liked": True})
+        status, view = self.call("GET", url + "puzzle.json", headers=a)
+        self.assertEqual((view["likes"], view["liked"]), (2, True))
+        status, view = self.call("GET", url + "puzzle.json")
+        self.assertEqual((view["likes"], view["liked"]), (2, False))
+        self.assertEqual(self.call("POST", url + "like", {"on": False}, a)[1], {"likes": 1, "liked": False})
+        self.assertEqual(self.call("POST", url + "like", {"on": True}, {"X-Visitor": "x"})[0], 404)  # ungültige Kennung
+        stored = self.app.puzzles[p["id"]]["online_link"]["likers"]
+        self.assertNotIn("bbbbbbbbbbbb", json.dumps(stored))  # nur Hash
+        status, res = self.call("GET", self.base + "/api/shares")
+        self.assertEqual(next(s for s in res["shares"] if s["id"] == p["id"])["likes"], 1)
+        self.assertNotIn("likes", self.app._internal_entry(self.app.puzzles[p["id"]], "https://app"))  # nur in der App
+        self.app.patch_share(self.app.puzzles[p["id"]]["online_link"]["token"], {"active": False}, "https://app")
+        self.assertEqual(self.call("POST", url + "like", {"on": True}, a)[0], 403)  # ausgeschaltet
+
+    def test_shares_api_flags(self):
+        """Shares-API (0.1.17): download = Foto, video und share getrennt, Standard aus, Smart darf alle drei ändern"""
+        p = self.new_puzzle()
+        self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"days": 30})
+        token = self.app.puzzles[p["id"]]["online_link"]["token"]
+        entry = self.app._internal_entry(self.app.puzzles[p["id"]], "https://app")
+        self.assertEqual((entry["download"], entry["video"], entry["share"]), (False, False, False))
+        self.assertTrue({"download", "video", "share"} <= set(entry["actions"]))
+        entry = self.app.patch_share(token, {"video": True, "share": True}, "https://app")
+        self.assertEqual((entry["download"], entry["video"], entry["share"]), (False, True, True))
+        with self.assertRaises(server.FieldError) as err:
+            self.app.patch_share(token, {"share": "ja"}, "https://app")
+        self.assertEqual(err.exception.field, "share")
+        status, res = self.call("GET", self.base + "/api/shares")
+        mine = next(s for s in res["shares"] if s["id"] == p["id"])
+        self.assertEqual((mine["video"], mine["share"]), (True, True))
+        status, res = self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"share": False})
+        self.assertFalse(self.app.puzzles[p["id"]]["online_link"]["share"])
+
+    def test_shares_api_preview(self):
+        """Shares-API: Vorschaubild nur bei abrufbaren Links, sonst preview None (wie Mosaik, 0.1.8)"""
+        p = self.new_puzzle()
+        self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"days": 30})
+        entry = lambda: self.app._internal_entry(self.app.puzzles[p["id"]], "https://app")
+        with self.app.lock:
+            link = self.app.puzzles[p["id"]]["online_link"]
+            self.assertTrue(entry()["preview"].endswith("card.jpg"))
+            for change in ({"protected": True}, {"active": False}, {"expires": time.time() - 10},
+                           {"valid_from": time.time() + 86400}):
+                saved = dict(link); link.update(change)
+                self.assertIsNone(entry()["preview"], change)
+                link.clear(); link.update(saved)
+            self.assertTrue(entry()["preview"].endswith("card.jpg"))
+
     def test_share_url_setting(self):
         """Box «Einstellungen»: eigene Adresse der Live-Links gilt vor SHARE_PUBLIC_URL, leer = wieder die Vorgabe"""
         status, setup = self.call("GET", self.base + "/api/shares")
@@ -212,6 +373,63 @@ class PuzzleServerTest(unittest.TestCase):
         finally:
             status, setup = self.call("POST", self.base + "/api/shares/url", {"url": ""})
         self.assertEqual((status, setup["url"], setup["custom"]), (200, "https://links.example.com/puzzles", False))
+
+    def test_details_defaults_made_with(self):
+        """Puzzle Details, Standard für neue Puzzles und «Erstellt mit» (0.1.8)"""
+        p = self.new_puzzle()
+        pid = p["id"]
+        steps = {"crop": False, "music": True, "puzzle": False, "dur": True, "text": False, "view": False}
+        status, p = self.call("POST", f"{self.base}/api/puzzles/{pid}",
+                              {"config": p["config"], "forWhom":"  Grosi   80 ", "note": "nur intern\r\n", "steps": steps})
+        self.assertEqual(status, 200, p)
+        status, p = self.call("GET", f"{self.base}/api/puzzles/{pid}")
+        self.assertEqual((p["note"], p["steps"]), ("nur intern", steps))
+        status, listing = self.call("GET", self.base + "/api/puzzles")
+        self.assertEqual(next(x for x in listing["puzzles"] if x["id"] == pid)["forWhom"], "Grosi 80")
+        status, err = self.call("POST", f"{self.base}/api/puzzles/{pid}", {"config": p["config"], "steps": "alle"})
+        self.assertEqual(status, 400, err)
+        # Die Notiz kommt nie zu den Empfängern
+        self.call("POST", f"{self.base}/api/puzzles/{pid}/link", {"days": 7})
+        view = self.app.shared_view(pid)
+        self.assertNotIn("note", json.dumps(view))
+        self.assertNotIn("nur intern", json.dumps(view))
+        self.assertEqual(view["year"], datetime.date.today().year)
+        try:
+            status, res = self.call("POST", self.base + "/api/settings/defaults",
+                                    {"defaults": {"config": {"count": 24, "format": "1:1", "title": "X", "text": "Hallo"},
+                                                  "steps": {"music": False}}})
+            self.assertEqual(status, 200, res)
+            d = res["defaults"]
+            self.assertEqual((d["config"]["count"], d["config"]["format"]), (24, "1:1"))
+            for key in ("title", "text", "seed"):
+                self.assertNotIn(key, d["config"])
+            self.assertEqual(d["steps"], {"crop": True, "music": False, "puzzle": True, "dur": True, "text": True, "view": True})
+            status, listing = self.call("GET", self.base + "/api/puzzles")
+            self.assertEqual(listing["defaults"], d)
+            status, res = self.call("POST", self.base + "/api/settings/defaults", {"defaults": None})
+            self.assertIsNone(res["defaults"])
+            status, err = self.call("POST", self.base + "/api/settings/made-with", {"url": "javascript:alert(1)"})
+            self.assertEqual((status, err.get("error_code")), (400, "urlInvalid"), err)
+            status, res = self.call("POST", self.base + "/api/settings/made-with", {"url": "https://puzzle.example.org/"})
+            self.assertEqual((status, res["madeWith"]), (200, "https://puzzle.example.org"), res)
+            self.assertEqual(self.app.shared_view(pid)["madeWith"], "https://puzzle.example.org")
+            status, res = self.call("POST", self.base + "/api/settings/made-with", {"url": "https://puzzle.example.org", "text": "  Example  /  Jane Doe "})
+            self.assertEqual((status, res["madeWithText"], res["madeWith"]), (200, "Example / Jane Doe", "https://puzzle.example.org"), res)
+            self.assertEqual(self.app.shared_view(pid)["madeWithText"], "Example / Jane Doe")
+            # Copyright: fest aus settings.json, keine API zum Ändern
+            self.assertEqual(self.app.shared_view(pid)["copyright"], "")
+            self.app.settings = {**self.app.settings, "copyright": "  example.org /  Jane Doe "}
+            self.assertEqual((self.app.shared_view(pid)["copyright"], self.app.app_settings()["copyright"]), ("example.org / Jane Doe",) * 2)
+            status, res = self.call("POST", self.base + "/api/settings/made-with", {"url": "", "text": "", "copyright": "x"})
+            self.assertEqual(res["copyright"], "example.org / Jane Doe")
+            self.app.settings.pop("copyright")
+        finally:
+            self.call("POST", self.base + "/api/settings/defaults", {"defaults": None})
+            status, res = self.call("POST", self.base + "/api/settings/made-with", {"url": "", "text": ""})
+        self.assertEqual((res["madeWith"], res["madeWithText"]), ("", ""))
+        whats = [e["what"] for e in self.app.log[-4:]]
+        self.assertIn("madeWith", whats)
+        self.assertIn("defaultsReset", whats)
 
     def test_notice_page(self):
         """Entscheid 52: Hinweisseite mit Vorrang, Status, Sprache, Umami-Grund, ohne Inhalt und ohne Zählung."""
@@ -252,7 +470,7 @@ class PuzzleServerTest(unittest.TestCase):
                 status, body = self.call("GET", self.sbase + path, headers=headers, raw=True)
                 self.assertEqual(status, status_wanted, text)
                 self.assertIn(text.encode(), body)
-                self.assertIn(f"grund: &quot;{grund}&quot;".encode(), body)
+                self.assertIn(f'grund: "{grund}"'.encode(), body)
                 self.assertNotIn(b"Geheim", body)
                 self.assertNotIn(b"og:image", body)
                 self.assertNotIn(path.encode(), body)  # Umami und Seite nennen den Code nicht
@@ -261,7 +479,7 @@ class PuzzleServerTest(unittest.TestCase):
                 self.assertEqual(len(calls), 2)
                 for call in calls:
                     self.assertTrue(call.startswith(b"function (p)"), call[:40])
-                    self.assertIn(b"p.url = &quot;/puzzles/&quot;", call)
+                    self.assertIn(b'p.url = "/puzzle-shared-link"', call)
                     self.assertIn(b"p.referrer = ''", call)
 
             soon = time.time() + 3 * 86400
@@ -283,6 +501,78 @@ class PuzzleServerTest(unittest.TestCase):
             self.assertEqual(views, 0)
         finally:
             app.umami_links = None
+
+    def test_umami_editor(self):
+        # Editor: hp.js, keine automatische Zählung, genau ein Aufruf mit Adresse «/» (ohne Puzzle-ID und Panel)
+        tmp = tempfile.mkdtemp()
+        try:
+            other = server.App("http://127.0.0.1:1", "test-key", os.path.join(tmp, "data"), os.path.join(tmp, "puzzles"), os.path.join(tmp, "music"),
+                               umami_url="https://umami.example.com/", umami_id="site-9")
+            tag = other.umami_tag
+            self.assertIn('src="https://umami.example.com/hp.js"', tag)
+            self.assertIn('data-auto-track="false"', tag)
+            calls = tag.split("umami.track(")[1:]
+            self.assertEqual(len(calls), 1)
+            self.assertTrue(calls[0].startswith('function (p) { p.url = "/puzzle-editor";'), calls[0][:40])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_whole_box_opens_pane(self):
+        """0.1.14: Klick auf die ganze Box wirkt wie [>]; das [>] bleibt der einzige Knopf im Kopf (keine verschachtelten Buttons)."""
+        import re
+        status, page = self.call("GET", self.base + "/", raw=True)
+        self.assertEqual(status, 200)
+        page = page.decode("utf-8")
+        heads = re.findall(r'<div class="boxHead">(.*?)</div>', page)
+        self.assertGreaterEqual(len(heads), 15)  # Menü links (13) und die zwei Grussbotschaft-Boxen in P5
+        for head in heads:
+            self.assertEqual(head.count("<button"), 1, head)
+            self.assertIn('class="paneBtn"', head)
+            self.assertNotIn("<button", head.split("</h2>")[0])  # Titel ohne Knopf darin
+        self.assertIn("function boxLead(box)", page)
+        for sel in (":scope > .boxHead > .paneBtn", ":scope > .clBoxHead > .paneBtn", ":scope .shareTitle > .paneBtn"):
+            self.assertIn(sel, page)  # Boxen links und in P5, Änderungen unter «Über», Karten in «Geteilte Puzzles»
+        self.assertIn("a,button,input,label,select,textarea,summary,[contenteditable]", page)  # Bedienelemente behalten ihren Klick
+        self.assertIn('e.target.closest("section.box, .clBox, .shareRow")', page)
+        self.assertIn("lead.click();", page)  # nochmals Klick schliesst wie beim [>]
+        self.assertIn("section.box:has(> .boxHead > .paneBtn)", page)  # cursor:pointer und Hover
+        # Kiosk-Admin baut die Box «Kiosk» im selben Muster (section.box > div.boxHead > button.paneBtn)
+        with open(os.path.join(HERE, "..", "app", "kiosk-admin.js"), encoding="utf-8") as f:
+            ka = f.read()
+        self.assertIn('mk("section", "box"), head = mk("div", "boxHead")', ka)
+        self.assertIn('mk("button", "paneBtn", ">")', ka)
+
+    def test_classic_edges(self):
+        """0.1.15: klassische Teile (gerade bis zur Nase) wählbar; Standard bleibt organisch, auch ohne «edges»."""
+        self.assertEqual(server.clean_config({})["edges"], "round")
+        self.assertEqual(server.clean_config({"edges": "classic"})["edges"], "classic")
+        with self.assertRaises(ValueError):
+            server.clean_config({"edges": "zigzag"})
+        # Standard von vor 0.1.15 ohne «edges»: neue Puzzles nehmen die Form aus dem Editor
+        self.assertNotIn("edges", server.clean_defaults({"config": {"count": 48}})["config"])
+        self.assertEqual(server.clean_defaults({"config": {"edges": "round"}})["config"]["edges"], "round")
+        # Umriss: Randteil aussen gerade, klassische Kante gerade bis u = .37, dann Nase nach aussen
+        top = server._piece_outline(0, 0, 100, 100, (0, 1, 0, 0), "classic")
+        self.assertEqual(top[:2], [(0, 0), (100, 0)])  # obere Kante ohne Nase: gerade
+        right = [p for p in top if p[0] > 100]
+        self.assertTrue(right and max(p[0] for p in right) > 125)  # Nase rechts ragt rund 28 % hinaus
+        self.assertIn((100, 37.0), top)  # gerades Stück bis zum Hals
+        self.assertEqual(len(server._piece_outline(1, 1, 100, 100, (1, -1, 1, -1), "round")), 1 + 4 * 32)
+        card = server.puzzle_card(Image.new("RGB", server.CARD_SIZE, (120, 160, 200)), 7, "classic")
+        self.assertEqual(card.size, server.CARD_SIZE)
+        # Editor und Engine kennen beide Formen; Umschalter im Panel «Puzzle», Standard für neue Puzzles klassisch
+        status, page = self.call("GET", self.base + "/", raw=True)
+        page = page.decode("utf-8")
+        self.assertIn('id="edgePick"', page)
+        self.assertIn('edges: "round", rot: false', page)  # FACTORY: organisch
+        self.assertIn('start: "scatter", edges: "round", seed', page)  # Editor-Startwert
+        self.assertLess(page.index('data-e="round"'), page.index('data-e="classic"'))  # Organisch zuerst
+        self.assertNotIn('edges: "classic"', page)
+        self.assertIn('st.edges = c.edges || "round"', page)
+        with open(os.path.join(HERE, "..", "app", "puzzle-engine.js"), encoding="utf-8") as f:
+            eng = f.read()
+        self.assertIn("classic: { a: .37, b: .63", eng)  # gleiche Zahlen wie EDGE_SEGS in server.py
+        self.assertEqual(server.EDGE_SEGS["classic"][:2], (.37, .63))
 
     def test_music(self):
         status, lib = self.call("GET", self.base + "/api/music")

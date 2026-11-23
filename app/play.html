@@ -22,7 +22,7 @@ html, body { margin:0; height:100%; background:#16191b; color:#eee; font:15px/1.
 #start:hover .big, #start:focus-visible .big { transform:scale(1.06); }
 #start .t { font-size:20px; font-weight:600; text-align:center; padding:0 20px; text-shadow:0 2px 8px rgba(0,0,0,.6); }
 #start .s { font-size:14px; color:#ccc; }
-#title { position:absolute; left:0; right:0; top:max(18px, env(safe-area-inset-top)); text-align:center; padding:0 112px; opacity:0; transition:opacity 1s; pointer-events:none; }
+#title { position:absolute; left:0; right:0; top:max(18px, env(safe-area-inset-top)); text-align:center; padding:0 var(--toolsPad, 112px); opacity:0; transition:opacity 1s; pointer-events:none; }
 #title.on { opacity:1; }
 #title h1 { margin:0; font-size:clamp(20px, 4vw, 30px); font-weight:650; text-shadow:0 2px 10px rgba(0,0,0,.7); }
 #title p { margin:4px 0 0; font-size:14px; color:#ccc; text-shadow:0 1px 6px rgba(0,0,0,.7); }
@@ -30,24 +30,43 @@ html, body { margin:0; height:100%; background:#16191b; color:#eee; font:15px/1.
 #bar.on { opacity:1; pointer-events:auto; }
 #bar button, #bar a { font:inherit; font-size:14px; padding:9px 16px; border-radius:999px; border:1px solid rgba(255,255,255,.3); background:rgba(20,22,24,.75); color:#fff; cursor:pointer; text-decoration:none; backdrop-filter:blur(6px); }
 #bar button:hover, #bar a:hover { background:rgba(60,64,68,.85); }
+#bar .wait { font-size:14px; padding:9px 16px; border-radius:999px; border:1px dashed rgba(255,255,255,.3); background:rgba(20,22,24,.6); color:#bbb; }
 #err { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:20px; color:#ccc; }
-#mute, #speed { position:absolute; right:max(14px, env(safe-area-inset-right)); top:max(14px, env(safe-area-inset-top)); width:40px; height:40px; border-radius:50%; border:1px solid rgba(255,255,255,.3); background:rgba(20,22,24,.6); color:#fff; font-size:17px; cursor:pointer; padding:0; }
-#speed { right:calc(max(14px, env(safe-area-inset-right)) + 48px); font-size:14px; font-weight:600; }
-@media (max-width:420px) { #title { padding:0 16px; top:calc(max(14px, env(safe-area-inset-top)) + 50px); } }  /* Handy: Titel unter die Knöpfe */
+/* Leiste oben rechts: Tempo, Ton, Like (Roger 22.11.2026, 0.1.8); von Anfang an sichtbar */
+#tools { position:absolute; right:max(14px, env(safe-area-inset-right)); top:max(14px, env(safe-area-inset-top)); display:flex; gap:8px; z-index:2; }
+#tools button { width:40px; height:40px; border-radius:50%; border:1px solid rgba(255,255,255,.3); background:rgba(20,22,24,.6); color:#fff; font-size:17px; cursor:pointer; padding:0; }
+#tools #speed { font-size:14px; font-weight:600; }
+#tools #like { width:auto; min-width:40px; padding:0 13px; border-radius:999px; display:flex; align-items:center; gap:6px; font-size:15px; }
+#like .h { font-size:18px; line-height:1; } #like.on .h { color:#ff5a6e; } #like .n:empty { display:none; }
+#like.pop .h { animation:pop .35s; } @keyframes pop { 50% { transform:scale(1.4); } }
+@media (max-width:520px) { #title { padding:0 16px !important; top:calc(max(14px, env(safe-area-inset-top)) + 50px); } }  /* Handy: Titel unter die Knöpfe */
+/* Fusszeile: Copyright und «Erstellt mit …» (Einstellungen, Roger 22.11.2026, 0.1.8); immer sichtbar, auch während des Spiels */
+#foot { position:absolute; left:0; right:0; bottom:max(6px, env(safe-area-inset-bottom)); margin:0; text-align:center; font-size:12px; color:#aaa; padding:0 12px; opacity:0; transition:opacity .6s; pointer-events:none; text-shadow:0 1px 4px rgba(0,0,0,.7); }
+#foot.on { opacity:1; } #foot.on a { pointer-events:auto; } #foot a { color:#ccc; }
+body.hasFoot #bar { bottom:calc(max(6px, env(safe-area-inset-bottom)) + 26px); }
+#foot span { display:block; line-height:1.4; } body.hasFoot2 #bar { bottom:calc(max(6px, env(safe-area-inset-bottom)) + 44px); }
+/* Bild antippen: nur das Bild, bildschirmfüllend; nochmals antippen: zurück (A3, Roger 22.11.2026, 0.1.8) */
+body.played #stage { cursor:zoom-in; } body.full #stage { cursor:zoom-out; }
+body.full #title, body.full #tools, body.full #bar, body.full #foot { visibility:hidden; }
 .hidden { display:none !important; }
 </style>
 </head>
 <body>
 <div id="stage"><canvas id="cv"></canvas></div>
 <div id="title"><h1 id="tTitle"></h1><p id="tSub"></p></div>
-<button id="speed" class="hidden" type="button" title="Tempo" data-i18n-title="play.speed" aria-label="Tempo" data-i18n-aria-label="play.speed">1×</button>
+<div id="tools" class="hidden">
+<button id="speed" type="button" title="Tempo" data-i18n-title="play.speed" aria-label="Tempo" data-i18n-aria-label="play.speed">1×</button>
 <button id="mute" class="hidden" type="button" title="Ton" data-i18n-title="play.sound" aria-label="Ton" data-i18n-aria-label="play.sound">🔊</button>
+<button id="like" type="button" title="Gefällt mir" data-i18n-title="play.like" aria-pressed="false"><span class="h" aria-hidden="true">♡</span><span class="n"></span></button>
+</div>
 <button id="start" type="button" class="hidden"><span class="big" aria-hidden="true">▶</span><span class="t" id="sTitle"></span><span class="s" id="sSub"></span></button>
 <div id="bar">
-  <button id="again" type="button" data-i18n="play.again">Nochmals</button>
-  <button id="sound" type="button" data-i18n="play.sound">Ton</button>
+  <button id="again" type="button" data-i18n="play.again">Nochmals abspielen</button>
   <a id="dl" class="hidden" href="download" data-i18n="play.download">Foto herunterladen</a>
+  <a id="vid" class="hidden" href="video" data-i18n="play.video">Video herunterladen</a>
+  <span id="vidWait" class="wait hidden" data-i18n="play.videoWait">Video wird erstellt …</span>
 </div>
+<p id="foot"></p>
 <div id="err" class="hidden"></div>
 <audio id="audio" preload="auto"></audio>
 
@@ -62,7 +81,7 @@ const SPEEDS = [1, 2, 4];  // Tempo 1×/2×/4×; die Musik läuft immer in norma
 function show(id, on) { $(id).classList.toggle("on", on); }
 function subline() {
   const parts = [];
-  if (view.by) parts.push(t("play.by", { by: view.by }));
+  parts.push(t("play.by"));
   if (view.meta) parts.push([view.meta.date ? fmtDate(view.meta.date) : "", view.meta.place || ""].filter(Boolean).join(" · "));
   return parts.filter(Boolean).join(" · ");
 }
@@ -70,11 +89,62 @@ function drawTexts() {
   if (!view) return;
   const title = view.title || "Puzzle";
   $("sTitle").textContent = title; $("tTitle").textContent = title;
-  $("sSub").textContent = view.by ? t("play.by", { by: view.by }) : t("play.tap");
+  $("sSub").textContent = t("play.by") === title ? "" : t("play.by");  // Kiosk: Titel-Vorgabe = Untertitel, nicht doppelt
   $("tSub").textContent = subline();
-  $("sound").textContent = t(muted ? "play.soundOn" : "play.soundOff");
   $("mute").textContent = muted ? "🔇" : "🔊";
+  $("mute").title = t(muted ? "play.soundOn" : "play.soundOff"); $("mute").setAttribute("aria-label", $("mute").title);
+  $("stage").title = document.body.classList.contains("played") ? t("play.full") : "";
   $("speed").textContent = speed + "×";
+  drawLike();
+  drawFoot();
+}
+// «© 2026 by Text» (Einstellungen «Erstellt mit», mit Link falls gesetzt), sonst «© 2026 Name · Erstellt mit example.com»
+// Fusszeile in zwei Zeilen (Roger 22.11.2026, 0.1.8): «Erstellt mit …» aus den Einstellungen, darunter das feste Copyright
+function drawFoot() {
+  const lines = [], year = view.year || new Date().getFullYear();
+  if (view.kiosk) {  // Kiosk (kiosk.py): kein ©, «Erstellt mit Puzzle · Mach dein eigenes Puzzle» (O3, Roger 22.11.2026, 0.1.9)
+    const line = [document.createTextNode(t("play.madeWith") + " Puzzle")];
+    if (view.madeWith) line.push(document.createTextNode(" · "), Object.assign(document.createElement("a"), { href: view.madeWith, target: "_blank", rel: "noopener", textContent: t("play.makeOwn") }));
+    lines.push(line);
+  } else {
+    const label = view.madeWithText || (view.madeWith || "").replace(/^https?:\/\//, "");
+    if (label) {
+      const by = view.madeWith ? Object.assign(document.createElement("a"), { href: view.madeWith, target: "_blank", rel: "noopener", textContent: label }) : document.createTextNode(label);
+      lines.push([document.createTextNode(t("play.madeWith") + " "), by]);
+    }
+    if (view.copyright) lines.push([document.createTextNode(`© ${year} by ${view.copyright}`)]);
+  }
+  $("foot").replaceChildren(...lines.map(x => { const sp = document.createElement("span"); sp.append(...x); return sp; }));
+  document.body.classList.toggle("hasFoot", lines.length > 0);
+  document.body.classList.toggle("hasFoot2", lines.length > 1);
+}
+// Like: ein Like pro Besucher (Zufalls-Kennung im Browser), Zahl für alle sichtbar (Roger 22.11.2026, 0.1.8)
+function visitorId() {
+  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+  try { let id = localStorage.getItem("puzzleVisitor"); if (!id) { id = make(); localStorage.setItem("puzzleVisitor", id); } return id; }
+  catch (e) { return visitorId.id || (visitorId.id = make()); }
+}
+function drawLike() {
+  const b = $("like"), n = view.likes || 0;
+  b.classList.toggle("hidden", !!view.kiosk);  // Kiosk: kein Like
+  b.classList.toggle("on", !!view.liked); b.setAttribute("aria-pressed", String(!!view.liked));
+  b.querySelector(".h").textContent = view.liked ? "♥" : "♡";
+  b.querySelector(".n").textContent = n ? String(n) : "";
+  b.title = t(view.liked ? "play.liked" : "play.like", { n }); b.setAttribute("aria-label", b.title);
+}
+let likeBusy = false;
+async function toggleLike() {
+  if (likeBusy) return;
+  likeBusy = true;
+  const on = !view.liked, before = { likes: view.likes, liked: view.liked };
+  view.liked = on; view.likes = Math.max(0, (view.likes || 0) + (on ? 1 : -1)); drawLike();
+  if (on) { const b = $("like"); b.classList.remove("pop"); void b.offsetWidth; b.classList.add("pop"); }
+  try {
+    const res = await fetch("like", { method: "POST", headers: { "Content-Type": "application/json", "X-Visitor": visitorId() }, body: JSON.stringify({ on }) });
+    if (!res.ok) throw new Error(res.status);
+    Object.assign(view, await res.json());
+  } catch (e) { Object.assign(view, before); }
+  likeBusy = false; drawLike();
 }
 function vol(tt) { return muted || !view.music ? 0 : musicVolume(tt, P.cfg.T, view.music.volume, view.music.fade); }
 function loop(ts) {
@@ -85,14 +155,15 @@ function loop(ts) {
   if (tt >= P.cfg.T) { tt = P.cfg.T; playing = false; audio.pause(); }
   P.draw(tt);
   audio.volume = clamp(vol(tt), 0, 1);
-  if (!playing) show("bar", true);
+  if (!playing) { show("bar", true); show("foot", true); }
   else requestAnimationFrame(loop);
 }
 function play() {
   // Titel steht von Anfang an oben (Roger 21.11.2026, 0.1.4)
-  $("start").classList.add("hidden"); show("bar", false); show("title", true); $("speed").classList.remove("hidden");
+  $("start").classList.add("hidden"); show("bar", false); show("title", true); document.body.classList.add("played"); drawTexts();
+  prefetchPhoto();
   P.t = 0; P.draw(0); playing = true; last = performance.now(); synced = speed === 1;
-  if (view.music) { $("mute").classList.remove("hidden"); audio.currentTime = 0; audio.muted = muted; audio.volume = clamp(vol(0), 0, 1); audio.play().catch(() => {}); }
+  if (view.music) { audio.currentTime = 0; audio.muted = muted; audio.volume = clamp(vol(0), 0, 1); audio.play().catch(() => {}); }
   requestAnimationFrame(loop);
 }
 function toggleSound() {
@@ -103,24 +174,108 @@ function toggleSound() {
 }
 $("start").onclick = play;
 $("again").onclick = play;
-$("sound").onclick = toggleSound;
 $("mute").onclick = toggleSound;
+$("like").onclick = toggleLike;
 $("speed").onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; synced = false; drawTexts(); };
-window.addEventListener("resize", () => { if (P.cfg) P.resize(); });
+// A3: Bild antippen = nur das Bild auf dem ganzen Bildschirm, nochmals antippen = zurück
+function toggleFull(on) {
+  if (!document.body.classList.contains("played")) return;
+  document.body.classList.toggle("full", on);
+  fitW = 0; refit();
+}
+$("stage").onclick = () => toggleFull(!document.body.classList.contains("full"));
+document.addEventListener("keydown", e => { if (e.key === "Escape") toggleFull(false); });
+// Platz für Titel (oben) und Knöpfe (unten), den der Schluss-Zoom frei lässt (Roger 22.11.2026)
+function setInset() {
+  document.documentElement.style.setProperty("--toolsPad", $("tools").offsetWidth + 22 + "px");  // Titel bleibt frei von der Leiste
+  if (document.body.classList.contains("full")) { P.inset = { top: 0, bottom: 0 }; return; }
+  // unten: Knöpfe und Fusszeile, je nachdem was höher steht (A3: vom Text darf nichts ins Bild)
+  const tb = $("title").getBoundingClientRect(), vh = innerHeight;
+  const low = ["bar", "foot"].map(id => $(id).getBoundingClientRect()).filter(r => r.height).map(r => r.top);
+  P.inset = { top: $("tTitle").textContent ? tb.bottom + 8 : 0, bottom: low.length ? vh - Math.min(...low) + 8 : 0 };
+}
+// Handy Hoch/Quer: iOS meldet «resize», bevor das Canvas die neue Grösse hat; darum neu messen, sobald die Grösse
+// wirklich stimmt (ResizeObserver) und zur Sicherheit nochmals nach der Drehung (sonst wird das Bild verzogen)
+let fitTimer = 0, fitW = 0, fitH = 0;
+function refit() {
+  if (!P.cfg) return;
+  const c = $("cv");
+  setInset();
+  if (c.clientWidth === fitW && c.clientHeight === fitH && c.width === Math.round(fitW * (devicePixelRatio || 1))) { P.draw(P.t); return; }
+  fitW = c.clientWidth; fitH = c.clientHeight; P.resize();
+}
+function refitSoon() { refit(); clearTimeout(fitTimer); fitTimer = setTimeout(refit, 350); setTimeout(refit, 900); }
+window.addEventListener("resize", refitSoon);
+window.addEventListener("orientationchange", refitSoon);
+if (window.visualViewport) visualViewport.addEventListener("resize", refitSoon);
+if (window.ResizeObserver) new ResizeObserver(refit).observe($("stage"));
 onLang(drawTexts);
 applyI18n();
 
+// Video (MP4) vom Render-Container (0.1.17): «Video wird erstellt …», alle 15 s nachfragen, dann der Knopf
+let videoPolls = 0;
+function drawVideo(state) {
+  $("vid").classList.toggle("hidden", state !== "ready");
+  $("vidWait").classList.toggle("hidden", state !== "pending");
+  if (state === "pending" && videoPolls++ < 240) setTimeout(async () => {
+    try {
+      const res = await fetch("puzzle.json", { cache: "no-store", headers: { "X-Visitor": visitorId() } });
+      drawVideo(res.ok ? (await res.json()).video : "pending");
+    } catch (e) { drawVideo("pending"); }
+  }, 15000);
+}
+
+// iPhone/iPad (0.1.17): Safari legt Downloads immer in «Dateien» ab. Über das Teilen-Menü geht es direkt in Fotos
+// («Bild sichern» / «Video sichern»). Andere Geräte laden normal herunter.
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const saved = {};
+async function fetchFile(a) {
+  const res = await fetch(a.getAttribute("href"), { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  const m = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+  return new File([blob], m ? m[1] : a.getAttribute("href"), { type: blob.type });
+}
+function saveToPhotos(a) {
+  a.addEventListener("click", async (ev) => {
+    if (!IOS || !navigator.canShare) return;  // normaler Download
+    ev.preventDefault();
+    const key = a.id, label = a.dataset.i18n;
+    try {
+      let file = saved[key] && await saved[key];  // Foto: schon während des Spiels geladen (prefetchPhoto)
+      const fresh = !file;
+      if (fresh) { saved[key] = fetchFile(a); file = await saved[key]; }
+      if (!navigator.canShare({ files: [file] })) { location.href = a.href; return; }
+      try { await navigator.share({ files: [file] }); a.textContent = t(label); }
+      catch (e) {
+        // Nach dem Laden ist die Berührung manchmal «verbraucht»: dann ein zweites Mal tippen lassen
+        if (e.name === "NotAllowedError" && fresh) a.textContent = t("play.saveTap");
+        else if (e.name !== "AbortError") location.href = a.href;
+      }
+    } catch (e) { delete saved[key]; location.href = a.href; }
+  });
+}
+// iPhone: Foto beim Start laden, damit das Teilen-Menü beim Tippen sofort kommt (sonst dauert es und die
+// Berührung ist verbraucht). Nur das Foto; das Video ist zu gross dafür.
+function prefetchPhoto() {
+  if (IOS && navigator.canShare && view && view.download && !saved.dl) saved.dl = fetchFile($("dl")).catch(() => null);
+}
+saveToPhotos($("dl"));
+saveToPhotos($("vid"));
+
 (async () => {
   try {
-    const res = await fetch("puzzle.json", { cache: "no-store" });
+    const res = await fetch("puzzle.json", { cache: "no-store", headers: { "X-Visitor": visitorId() } });
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(srvText(d, "error") || `HTTP ${res.status}`); }
     view = await res.json();
     const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error(t("play.imgFailed"))); i.src = "photo.jpg"; });
-    await loadFont(view.config.textFont);  // Collage-Schrift erst laden, sonst zeichnet das Canvas die Ersatzschrift
+    // Collage-Schriften erst laden, sonst zeichnet das Canvas die Ersatzschrift (auch die der Grussbotschaft, C3)
+    await Promise.all([loadFont(view.config.textFont), loadFont(view.config.greetFont)]);
     P.setup(puzzleConfig({ ...view.config, title: view.title }, img)); P.draw(0);
-    if (view.music) { audio.src = "music"; audio.load(); } else $("sound").classList.add("hidden");
+    if (view.music) { audio.src = "music"; audio.load(); $("mute").classList.remove("hidden"); } else $("mute").classList.add("hidden");
     $("dl").classList.toggle("hidden", !view.download);
-    drawTexts(); $("start").classList.remove("hidden"); $("start").focus();
+    drawVideo(view.video);
+    $("tools").classList.remove("hidden"); drawTexts(); fitW = 0; refit(); $("start").classList.remove("hidden"); show("foot", true); $("start").focus();
   } catch (e) {
     $("err").textContent = e.message || String(e); $("err").classList.remove("hidden");
   }

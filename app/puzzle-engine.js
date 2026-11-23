@@ -1,10 +1,11 @@
 // Puzzle-Engine: legt ein Foto Teil für Teil auf einem Tisch zusammen, live auf einem <canvas> (kein Video).
 // Aus dem Mockup docs/design/mockups/puzzle/puzzle.html (Smart Albums), gleich im Editor (puzzle.html) und auf der
 // Empfängerseite (play.html). Wer hier etwas ändert, ändert beide Seiten.
-// Einstellungen (cfg): src (Canvas mit dem Motiv), cols, rows, seed, start (scatter|heap|mix), rot, frame, ghost,
+// Einstellungen (cfg): src (Canvas mit dem Motiv), cols, rows, seed, start (scatter|heap|mix), edges (classic|round), rot, frame, ghost, ghostPct (5–60 % Deckkraft des Motivs),
 // T (Dauer in s), hold (fertiges Bild 2–10 s), tempo (0–2, Stärke des Tempo-Bogens), frameAt (15–70 % der Zeit: Rahmen fertig),
 // ramp (0–60 %: schneller werden ab), title, text, textMode (in|end), textFont (FONTS), textSize (50–200 %),
-// textPos (tl tc tr ml mc mr bl bc br), textColor (#rrggbb).
+// textPos (tl tc tr ml mc mr bl bc br), textColor (#rrggbb), textArc (-100–100, Bogen), textRot (-45–45°).
+// Grussbotschaft auf dem leeren Tisch (C3): greet, greetFont, greetSize, greetPos, greetColor, greetArc, greetRot.
 "use strict";
 function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 // Zeit als m:ss. Nicht fmt: das ist in i18n.js die Zahlenformatierung
@@ -77,17 +78,44 @@ function drawText(g, c, W, H, alpha) {
   const lh = fs * 1.15, tot = lh * lines.length;
   const y0 = v === "t" ? pad : v === "b" ? H - pad - tot : (H - tot) / 2;
   const x = h === "l" ? pad : h === "r" ? W - pad : W / 2;
+  const arc = clamp((+c.textArc || 0) / 100, -1, 1), rot = clamp(+c.textRot || 0, -45, 45) * Math.PI / 180;
   g.save(); g.globalAlpha = alpha; g.textAlign = h === "l" ? "left" : h === "r" ? "right" : "center"; g.textBaseline = "top";
   g.fillStyle = c.textColor || "#ffffff";
   g.shadowColor = darkColor(c.textColor) ? "rgba(255,255,255,.7)" : "rgba(0,0,0,.7)"; g.shadowBlur = fs * .15; g.shadowOffsetY = fs * .04;
-  lines.forEach((l, i) => g.fillText(l, x, y0 + i * lh + fs * .05)); g.restore();
+  const lw = lines.map(l => g.measureText(l).width), lcx = i => h === "l" ? x + lw[i] / 2 : h === "r" ? x - lw[i] / 2 : x;
+  if (rot) {  // C2: um die Mitte des Schriftzugs drehen
+    const bw = Math.max(...lw), cx = h === "l" ? x + bw / 2 : h === "r" ? x - bw / 2 : x, cy = y0 + tot / 2;
+    g.translate(cx, cy); g.rotate(rot); g.translate(-cx, -cy);
+  }
+  if (Math.abs(arc) < .01) lines.forEach((l, i) => g.fillText(l, x, y0 + i * lh + fs * .05));
+  else {  // C1: jede Zeile als weicher Bogen, + nach oben gewölbt, - nach unten; ganz = gut 160° über die Breite
+    const R = maxW / (Math.abs(arc) * Math.PI * .9), up = arc > 0;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    lines.forEach((l, i) => {
+      const ly = y0 + i * lh + fs * .6, cx = lcx(i), cy = up ? ly + R : ly - R;
+      let s = -lw[i] / 2;
+      for (const ch of l) {
+        const w = g.measureText(ch).width, a = (s + w / 2) / R; s += w;
+        g.save(); g.translate(cx + R * Math.sin(a), up ? cy - R * Math.cos(a) : cy + R * Math.cos(a)); g.rotate(up ? a : -a);
+        g.fillText(ch, 0, 0); g.restore();
+      }
+    });
+  }
+  g.restore();
+}
+// Die Grussbotschaft auf dem leeren Tisch hat dieselben Einstellungen wie der Schriftzug, nur mit «greet» statt «text»
+function greetText(c) {
+  return { text: c.greet || "", textFont: c.greetFont, textSize: c.greetSize, textPos: c.greetPos, textColor: c.greetColor,
+           textArc: c.greetArc, textRot: c.greetRot };
 }
 
 // Tempo-Kurve (Mockup P4, Roger 21.11.2026): Grundtempo, ab «Schneller werden ab» ein Bogen (je stärker, desto spitzer).
 // Mit «Zuerst den Rahmen» liegen bis tR genau die Randteile, bis END alle; dazwischen weicher Übergang, kein Bruch.
 // Gibt die Rate (Teile pro s) in Schritten von STEP zurück.
 function tempoCurve(o) {
-  const T = o.T, H = o.hold, END = Math.max(T * .5, T - H), T0 = Math.min(1.5, END * .1), STEP = .25, v = o.tempo || 0;
+  // T0 «Start nach … s» (Roger 22.11.2026, 0.1.8); ältere Puzzles ohne lead behalten den bisherigen Start
+  const T = o.T, H = o.hold, END = Math.max(T * .5, T - H), STEP = .25, v = o.tempo || 0;
+  const T0 = o.lead == null ? Math.min(1.5, END * .1) : Math.min(o.lead, END * .5);
   const N = o.N, EDGE = o.frame ? o.EDGE : 0;
   const tR = T0 + (END - T0) * (o.frameAt || 40) / 100, S = T0 + (END - T0) * (o.ramp ?? 5) / 100;
   const raw = [];
@@ -129,16 +157,28 @@ function motifSrc(base, t) {
 }
 function grid(n, a) { const cols = Math.max(2, Math.round(Math.sqrt(n * a))), rows = Math.max(2, Math.round(n / cols)); return [cols, rows]; }
 
-function edgePath(g, x0, y0, x1, y1, s, tab) {
+// Kanten der Teile: u entlang der Kante (0–1), v nach aussen in Einheiten von tab; ohne Nase (s = 0) gerade.
+// edges (cfg): «classic» gerade Linie bis zum Hals, dort eine Ecke, runder Kopf (wählbar seit 0.1.15);
+// «round» organisch, die Linie biegt weich in die Nase (Standard, Form bis 0.1.14 und gespeicherte Puzzles ohne «edges»). Gleich in server.py (EDGE_SEGS)
+const EDGE_SEGS = {
+  round: { a: 0, b: 1, segs: [[[.30, 0], [.40, .02], [.38, .10]], [[.30, .20], [.36, .30], [.50, .30]], [[.64, .30], [.70, .20], [.62, .10]], [[.60, .02], [.70, 0], [1, 0]]] },
+  classic: { a: .37, b: .63, segs: [[[.37, .035], [.40, .05], [.39, .09]], [[.30, .14], [.31, .28], [.50, .28]], [[.69, .28], [.70, .14], [.61, .09]], [[.60, .05], [.63, .035], [.63, 0]]] },
+};
+const EDGES = ["classic", "round"];
+function edgePath(g, x0, y0, x1, y1, s, tab, edges) {
   if (!s) { g.lineTo(x1, y1); return; }
+  const E = EDGE_SEGS[edges] || EDGE_SEGS.round;
   const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy), ox = dy / len * tab * s, oy = -dx / len * tab * s;
   const P = (u, v) => [x0 + u * dx + v * ox, y0 + u * dy + v * oy];
-  const segs = [[[.30, 0], [.40, .02], [.38, .10]], [[.30, .20], [.36, .30], [.50, .30]], [[.64, .30], [.70, .20], [.62, .10]], [[.60, .02], [.70, 0], [1, 0]]];
-  for (const sg of segs) { const a = P(...sg[0]), b = P(...sg[1]), c = P(...sg[2]); g.bezierCurveTo(a[0], a[1], b[0], b[1], c[0], c[1]); }
+  if (E.a) g.lineTo(...P(E.a, 0));
+  for (const sg of E.segs) { const a = P(...sg[0]), b = P(...sg[1]), c = P(...sg[2]); g.bezierCurveTo(a[0], a[1], b[0], b[1], c[0], c[1]); }
+  if (E.b < 1) g.lineTo(x1, y1);
 }
 
 class Puzzle {
-  constructor(canvas) { this.cv = canvas; this.g = canvas.getContext("2d"); this.t = 0; this.cfg = null; }
+  // inset: Platz oben/unten (CSS-px), den der Schluss-Zoom frei lässt, z. B. für den Titel auf der Empfängerseite
+  // size {w, h}: feste Grösse ohne Anzeige, z. B. das Vorschaubild für Messenger (1200 × 630)
+  constructor(canvas, size) { this.cv = canvas; this.g = canvas.getContext("2d"); this.t = 0; this.cfg = null; this.inset = { top: 0, bottom: 0 }; this.size = size || null; }
   setup(cfg) {
     this.cfg = cfg; const r = mulberry(cfg.seed); this.r = r;
     const W = cfg.src.width, H = cfg.src.height, cw = W / cfg.cols, ch = H / cfg.rows;
@@ -153,17 +193,19 @@ class Puzzle {
     this.layout(); this.schedule(); this.place(); this.render();
   }
   layout() {
-    const dpr = window.devicePixelRatio || 1, w = this.cv.clientWidth || 600, h = this.cv.clientHeight || 400;
+    const z = this.size, dpr = z ? 1 : window.devicePixelRatio || 1, w = z ? z.w : this.cv.clientWidth || 600, h = z ? z.h : this.cv.clientHeight || 400;
     this.cv.width = Math.round(w * dpr); this.cv.height = Math.round(h * dpr); this.dpr = dpr; this.vw = w; this.vh = h;
-    this.S = Math.min(w * .6 / this.W, h * .62 / this.H); this.bx = (w - this.W * this.S) / 2; this.by = (h - this.H * this.S) / 2;
+    // Das Brett steht zwischen dem Platz oben/unten (inset), damit Titel und Knöpfe nie im Bild liegen (A3, 0.1.8)
+    const iT = this.inset.top || 0, iB = this.inset.bottom || 0, ah = Math.max(h * .2, h - iT - iB);
+    this.S = Math.min(w * .6 / this.W, h * .62 / this.H, ah * .92 / this.H); this.bx = (w - this.W * this.S) / 2; this.by = iT + (ah - this.H * this.S) / 2;
   }
   render() {  // Teile vorab zeichnen, in Pixelgrösse der Anzeige
-    const { cw, ch, m, tab } = this, sc = this.S * this.dpr, src = this.cfg.src;
+    const { cw, ch, m, tab } = this, sc = this.S * this.dpr, src = this.cfg.src, ed = this.cfg.edges;
     for (const p of this.pieces) {
       const c = p.cv || document.createElement("canvas"); c.width = Math.max(1, Math.ceil((cw + 2 * m) * sc)); c.height = Math.max(1, Math.ceil((ch + 2 * m) * sc));
       const g = c.getContext("2d");
       g.setTransform(sc, 0, 0, sc, 0, 0); g.translate(m, m);
-      const path = () => { g.beginPath(); g.moveTo(0, 0); edgePath(g, 0, 0, cw, 0, p.top, tab); edgePath(g, cw, 0, cw, ch, p.right, tab); edgePath(g, cw, ch, 0, ch, p.bottom, tab); edgePath(g, 0, ch, 0, 0, p.left, tab); g.closePath(); };
+      const path = () => { g.beginPath(); g.moveTo(0, 0); edgePath(g, 0, 0, cw, 0, p.top, tab, ed); edgePath(g, cw, 0, cw, ch, p.right, tab, ed); edgePath(g, cw, ch, 0, ch, p.bottom, tab, ed); edgePath(g, 0, ch, 0, 0, p.left, tab, ed); g.closePath(); };
       path(); g.save(); g.shadowColor = "rgba(0,0,0,.55)"; g.shadowBlur = 3 * this.dpr; g.shadowOffsetY = this.dpr; g.fillStyle = "#000"; g.fill(); g.restore();
       g.save(); path(); g.clip(); g.drawImage(src, -p.x * cw, -p.y * ch);
       g.lineWidth = 2 / this.S; g.strokeStyle = "rgba(255,255,255,.28)"; path(); g.stroke(); g.restore();
@@ -176,7 +218,7 @@ class Puzzle {
     const sh = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
     let order;
     if (c.frame) { const e = this.pieces.filter(p => p.edge), i = this.pieces.filter(p => !p.edge); order = sh(e).concat(sh(i)); } else order = sh(this.pieces.slice());
-    const cv = tempoCurve({ T: c.T, hold: c.hold, tempo: c.tempo, frameAt: c.frameAt, ramp: c.ramp, frame: c.frame, N, EDGE: this.pieces.filter(p => p.edge).length });
+    const cv = tempoCurve({ T: c.T, hold: c.hold, tempo: c.tempo, frameAt: c.frameAt, ramp: c.ramp, lead: c.lead, frame: c.frame, N, EDGE: this.pieces.filter(p => p.edge).length });
     this.curve = cv;
     // Teil i ist fertig, wenn die kumulierte Rate i+1 erreicht; Flugzeit je nach Tempo (schneller = kürzer)
     let cum = 0, k = 0;
@@ -190,7 +232,7 @@ class Puzzle {
       cum += add;
     }
     for (; k < N; k++) { const p = order[k]; p.e = cv.END; p.s = Math.max(.05, cv.END - .6); p.d = p.e - p.s; p.ord = k; }
-    this.order = order; this.done = Math.max(...order.map(p => p.e));
+    this.order = order; this.done = Math.max(...order.map(p => p.e)); this.first = Math.min(...order.map(p => p.s));
     this.frameDone = c.frame ? Math.max(...order.filter(p => p.edge).map(p => p.e)) : null;
     const ev = []; order.forEach(p => { ev.push([p.s, 1]); ev.push([p.e, -1]); }); ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     let cur = 0, mx = 0; ev.forEach(e => { cur += e[1]; mx = Math.max(mx, cur); }); this.maxPar = mx;
@@ -218,12 +260,22 @@ class Puzzle {
     const bg = g.createRadialGradient(this.vw / 2, this.vh / 2, 10, this.vw / 2, this.vh / 2, Math.max(this.vw, this.vh) * .7);
     bg.addColorStop(0, "#2d3236"); bg.addColorStop(1, "#16191b"); g.fillStyle = bg; g.fillRect(0, 0, this.vw, this.vh);
     // Schluss (Entscheid 13): fertiges Bild 0,3 s nach «fertig» langsam auf Bildschirmgrösse zoomen, um die Brettmitte
-    const zMax = Math.min(this.vw * .97 / (this.W * S), this.vh * .97 / (this.H * S)), zDur = clamp((c.T - this.done) * .7, 1.2, 4);
-    const z = t > this.done ? 1 + (zMax - 1) * ease(clamp((t - this.done - .3) / zDur, 0, 1)) : 1;
-    if (z !== 1) { const cx = this.bx + this.W * S / 2, cy = this.by + this.H * S / 2; g.translate(cx, cy); g.scale(z, z); g.translate(-cx, -cy); }
+    // Ohne den Platz oben/unten (inset): der Titel steht nicht im gezoomten Bild (Roger 22.11.2026)
+    const iT = this.inset.top || 0, fh = Math.max(this.vh * .2, this.vh - iT - (this.inset.bottom || 0));
+    const zMax = Math.max(1, Math.min(this.vw * .97 / (this.W * S), fh * .97 / (this.H * S))), zDur = clamp((c.T - this.done) * .7, 1.2, 4);
+    const zk = t > this.done ? ease(clamp((t - this.done - .3) / zDur, 0, 1)) : 0, z = 1 + (zMax - 1) * zk;
+    if (z !== 1) {
+      const cx = this.bx + this.W * S / 2, cy = this.by + this.H * S / 2;
+      g.translate(cx, cy); g.scale(z, z); g.translate(-cx, -cy);
+    }
     g.fillStyle = "rgba(255,255,255,.04)"; g.fillRect(this.bx, this.by, this.W * S, this.H * S);
-    if (c.ghost) { g.globalAlpha = .13; g.drawImage(c.src, this.bx, this.by, this.W * S, this.H * S); g.globalAlpha = 1; }
+    if (c.ghost) { g.globalAlpha = clamp((c.ghostPct ?? 15) / 100, .05, .6); g.drawImage(c.src, this.bx, this.by, this.W * S, this.H * S); g.globalAlpha = 1; }
     g.setLineDash([4, 4]); g.strokeStyle = "rgba(255,255,255,.22)"; g.strokeRect(this.bx + .5, this.by + .5, this.W * S - 1, this.H * S - 1); g.setLineDash([]);
+    // C3: Grussbotschaft auf dem leeren Tisch, blendet aus, sobald die ersten Teile fliegen
+    if (String(c.greet || "").trim()) {
+      const k = 1 - clamp((t - (this.first || 0)) / 1.2, 0, 1);
+      if (k > 0) { g.save(); g.translate(this.bx, this.by); g.scale(S, S); drawText(g, greetText(c), this.W, this.H, k); g.restore(); }
+    }
     const placed = [], fly = [], rest = [];
     for (const p of this.order) { if (t >= p.e) placed.push(p); else if (t > p.s) fly.push(p); }
     for (const p of this.resting) if (t <= p.s) rest.push(p);

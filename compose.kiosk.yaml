@@ -1,0 +1,99 @@
+# Puzzle in kiosk mode: guests make a puzzle from an uploaded photo without signing in and share it with a link.
+# Same image as the app, own container and own data folder (never share ./data with a normal Puzzle container).
+# Three ports: 8080 guests (public), 8081 shared links (public), 8082 admin with login (keep it private or behind
+# your reverse proxy with access control). See README.md, "Kiosk mode".
+services:
+  kiosk:
+    container_name: immich-puzzle-kiosk
+    # Pin a version (or append @sha256:<digest> from `docker inspect`) instead of :latest for a public service
+    image: ghcr.io/rheckly/immich-puzzle:0.1.19
+    restart: unless-stopped
+    # Hardening: own user (./data must belong to it: mkdir data && chown 1000:1000 data), read-only root,
+    # no capabilities, limits for memory, processes and CPU
+    user: "${PUID:-1000}:${PGID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 256                                       # threads count too (one per request); ignored on Synology
+    cpu_shares: 512    # CPU priority (half); "cpus" needs the CFS scheduler, missing on Synology
+    environment:
+      TZ: ${TZ:-UTC}
+      PUZZLE_MODE: kiosk
+      DATA_DIR: /data                                     # settings, guest puzzles, statistics, login state
+      MUSIC_DIR: /music                                   # optional read-only library; guests cannot upload music
+      SHARE_PORT: "8081"
+      ADMIN_PORT: "8082"
+      SHARE_PUBLIC_URL: ${SHARE_PUBLIC_URL:-}             # e.g. https://links.example.com/puzzles
+      # Admin login on port 8082: without LOGIN_PASSWORD the admin port does not start
+      LOGIN_USER: ${LOGIN_USER:-admin}
+      LOGIN_PASSWORD: ${LOGIN_PASSWORD:-}
+      LOGIN_NAME: ${LOGIN_NAME:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}               # needed for the per-device limit behind a reverse proxy
+      # Limits (0 = no limit for per-hour, active per device, puzzles and storage)
+      KIOSK_ENABLED: ${KIOSK_ENABLED:-true}               # start state; the switch in the admin wins afterwards
+      KIOSK_MAX_PHOTO_MB: ${KIOSK_MAX_PHOTO_MB:-16}
+      KIOSK_MAX_PER_IP_HOUR: ${KIOSK_MAX_PER_IP_HOUR:-10} # new puzzles and photo changes per device (IPv6: per /64)
+      KIOSK_MAX_ACTIVE_PER_IP: ${KIOSK_MAX_ACTIVE_PER_IP:-20} # existing puzzles per device, counted from today
+      KIOSK_MAX_PUZZLES: ${KIOSK_MAX_PUZZLES:-500}
+      KIOSK_MAX_STORAGE_MB: ${KIOSK_MAX_STORAGE_MB:-2048}
+      KIOSK_DRAFT_HOURS: ${KIOSK_DRAFT_HOURS:-24}         # puzzles without a link are deleted after this
+      KIOSK_CLEAN_MINUTES: ${KIOSK_CLEAN_MINUTES:-15}     # cleanup job interval
+      # Optional: Umami statistics (guest editor / shared links)
+      UMAMI_URL: ${UMAMI_URL:-}
+      UMAMI_WEBSITE_ID: ${UMAMI_WEBSITE_ID:-}
+      UMAMI_LINKS_ID: ${UMAMI_LINKS_ID:-}
+      # Optional: notifications to your phone via ntfy (limits, errors, daily summary; switches in the admin)
+      NTFY_URL: ${NTFY_URL:-}                             # e.g. https://ntfy.example.com
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      NTFY_TOKEN: ${NTFY_TOKEN:-}                         # access token of a user that may only write to this topic
+    volumes:
+      - ./data:/data
+      - ${MUSIC_PATH:-./music}:/music:ro
+    ports:
+      - "${KIOSK_PORT:-8080}:8080"                        # guests
+      - "${KIOSK_SHARE_PORT:-8081}:8081"                  # shared links
+      - "${KIOSK_ADMIN_PORT:-8082}:8082"                  # admin (login)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=4)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Optional: video download (MP4) of shared puzzles. Renders one video after another from ./data/render, without
+  # any network (no port, no internet). Switch it on in the admin (port 8082); without this service the button never shows.
+  render:
+    container_name: immich-puzzle-kiosk-render
+    image: ghcr.io/rheckly/immich-puzzle-render:0.1.19               # same version as the kiosk
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"                  # same user as the kiosk (it deletes the videos)
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpu_shares: 256                                       # lower priority than the app
+    depends_on:
+      kiosk:
+        condition: service_started                 # order only; the renderer creates missing folders itself
+    environment:
+      TZ: ${TZ:-UTC}
+      RENDER_SIZE: ${RENDER_SIZE:-1080}                   # short side in pixels (1080 = Full HD, 720 renders faster)
+    volumes:
+      - ./data/kiosk:/data/puzzles:ro                     # the kiosk keeps guest puzzles in data/kiosk
+      - ./data/music:/data/music:ro
+      - ./data/render:/data/render
+      - ${MUSIC_PATH:-./music}:/music:ro
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

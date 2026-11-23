@@ -6,13 +6,18 @@
 
 Pick a photo from your [Immich](https://immich.app) library (or upload one), choose a format and 24 to 500 pieces,
 add music and a caption, and share a link. The recipient taps ▶ and watches the puzzle assemble itself live in the
-browser, piece by piece, with music. No video is rendered: the link stays small and sharp on every screen.
+browser, piece by piece, with music. The link stays small and sharp on every screen; an MP4 for download is
+optional.
 
 - Photo from Immich (albums, people, shared albums) or uploaded; nine formats, crop, rotate, zoom
-- 24–500 pieces, scattered or piled start, rotated pieces, frame first, speed curve
+- 24–500 pieces, round or classic piece shapes (straight edge pieces and corners), scattered or piled start,
+  rotated pieces, frame first, speed curve
 - Music from your own library or uploaded (MP3, M4A, OGG, WAV), fade-out, duration up to one minute
 - Caption with 21 fonts, nine positions and colours; title and hold time at the end, then a zoom to full screen
-- Shared links on a separate port, with password, download, metadata, validity period and an on/off switch
+- Shared links on a separate port, with password, photo and video download, metadata, validity period and an
+  on/off switch
+- Optional: MP4 video of a shared puzzle, rendered on your server without network access
+- Optional: kiosk mode for guests without an account, phone notifications via ntfy
 - English and German, light and dark
 
 ![The editor: the steps on the left, the open step with its live preview next to them](docs/screenshot.png)
@@ -219,6 +224,54 @@ With your own [Umami](https://umami.is) instance: `UMAMI_URL` and `UMAMI_WEBSITE
 `UMAMI_LINKS_ID` counts views of shared links (without the code in the URL). Empty: nothing is counted and no script
 is loaded.
 
+### Video download (MP4)
+
+The `render` service in `compose.yaml` turns a shared puzzle into an MP4 (30 fps, 1920×1080 or 1080×1920 after
+the photo, with title, footer and music). It uses the same puzzle engine as the browser (Node, Skia, ffmpeg, no
+browser) and runs without any network: no port, no internet; it only exchanges files in `./data/render`.
+
+- switch it on under **Settings › Video download › Create videos**; without the `render` service the switch has no effect
+- a video is only made for an active link with **Allow download (video)**, one after another, about a minute
+  after the last change; recipients see "Creating video …" until it is ready
+- the video is deleted with the puzzle, when the link is deleted or the switch is turned off
+- `RENDER_SIZE` sets the short side (default `1080`; `720` renders faster); the image is built for `linux/amd64`
+- remove the `render` service from `compose.yaml` if you do not want videos
+
+### Notifications (ntfy)
+
+With your own [ntfy](https://ntfy.sh) server, Puzzle sends a daily summary of the previous day (new puzzles and
+links, views, likes, storage) and a message when it starts after a crash; the kiosk also reports limits that
+were reached and failed cleanup jobs. Set `NTFY_URL`, `NTFY_TOPIC` and `NTFY_TOKEN` (the token of a ntfy user
+that may only write to this topic). Under **Settings** (kiosk: in the admin) each kind has its own switch, the
+time of the summary (default 08:00), **Send test notification** and **Send summary now**. Messages contain no IP
+addresses and no names of visitors. Without `NTFY_URL` nothing is sent.
+
+### Kiosk mode
+
+A second container from the same image lets guests make a puzzle from an uploaded photo without signing in, e.g. at
+an event or on a public page. Use `compose.kiosk.yaml` in its own folder with its own `./data`:
+
+- port 8080: guest editor (public), port 8081: shared links (public), port 8082: admin with login (the normal app plus
+  a **Kiosk** box: on/off, numbers per day, cleanup job, contact address and text of the privacy page, default website title)
+- no Immich, no shares API; guests cannot upload music (a read-only library in `/music` is offered if present)
+- every guest puzzle gets an edit link; only a hash of its key is stored
+- puzzles without a link are deleted after `KIOSK_DRAFT_HOURS`, puzzles with a link when it expires (7 days at most)
+- `KIOSK_MAX_PHOTO_MB`, `KIOSK_MAX_PER_IP_HOUR` (new puzzles and photo changes; IPv6 counted per /64),
+  `KIOSK_MAX_ACTIVE_PER_IP`, `KIOSK_MAX_PUZZLES`, `KIOSK_MAX_STORAGE_MB`, `KIOSK_DRAFT_HOURS`, `KIOSK_CLEAN_MINUTES`,
+  `KIOSK_ENABLED` (start state), `ADMIN_PORT` (default 8082)
+- photos above 40 megapixels or in other formats than JPEG, PNG and WebP are refused; the admin has an emergency stop
+  that deletes all guest puzzles of the last hours
+- `compose.kiosk.yaml` runs the container hardened (own user, read-only, no capabilities, memory/process/CPU limits);
+  the guest editor and shared links send a strict Content Security Policy
+- behind a reverse proxy set `TRUSTED_PROXIES`, otherwise all guests count as one device
+- set **Made with** in the admin settings to the guest address: shared links then show "Make your own puzzle"
+- guests make a puzzle in three steps: **Photo · Design · Share**
+- `./data` must belong to `PUID`:`PGID` (default `1000:1000`); the kiosk keeps guest puzzles in `./data/kiosk`
+- video download and ntfy work as described above; the switches are in the admin (port 8082). The `render`
+  service in `compose.kiosk.yaml` runs as the same user as the kiosk, because the kiosk deletes the videos
+- host ports: `KIOSK_PORT`, `KIOSK_SHARE_PORT`, `KIOSK_ADMIN_PORT` (default 8080, 8081, 8082); pin the image
+  version for a public service
+
 ## All settings
 
 | Variable | Default | Meaning |
@@ -234,6 +287,10 @@ is loaded.
 | `FAMILY_ID` / `FAMILY_SECRET` / `FAMILY_COOKIE_DOMAIN` | `puzzle` / empty / empty | family login |
 | `SHARES_API_KEY` | empty | key for the shared-links overview of a hub service |
 | `UMAMI_URL` / `UMAMI_WEBSITE_ID` / `UMAMI_LINKS_ID` | empty | Umami statistics |
+| `NTFY_URL` / `NTFY_TOPIC` / `NTFY_TOKEN` | empty | phone notifications via ntfy |
+| `RENDER_SIZE` | `1080` | short side of the MP4 in pixels (render service) |
+| `PUID` / `PGID` | `1000` / `1000` | user of the kiosk and its render service (compose.kiosk.yaml) |
+| `KIOSK_PORT` / `KIOSK_SHARE_PORT` / `KIOSK_ADMIN_PORT` | `8080` / `8081` / `8082` | kiosk host ports (compose only) |
 | `DATA_DIR` / `PUZZLE_DIR` / `MUSIC_DIR` | `/data` / `/data/puzzles` / `/music` | paths inside the container |
 
 ## Development
@@ -258,8 +315,8 @@ Tests:
 .venv/bin/python -m unittest discover -s tests && .venv/bin/python tests/check_texts.py
 ```
 
-(On Windows `.venv/Scripts/python`.) Releases: every tag `vX.Y.Z` builds `ghcr.io/rheckly/immich-puzzle:X.Y.Z` and
-`:latest`, see [docs/RELEASE.md](docs/RELEASE.md). The author's own NAS setup is described in German in
+(On Windows `.venv/Scripts/python`.) Releases: every tag `vX.Y.Z` builds `ghcr.io/rheckly/immich-puzzle:X.Y.Z`,
+`ghcr.io/rheckly/immich-puzzle-render:X.Y.Z` and `:latest`. The author's own NAS setup is described in German in
 [docs/NAS.de.md](docs/NAS.de.md).
 
 ## License

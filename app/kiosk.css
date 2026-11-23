@@ -1,0 +1,125 @@
+/* Kiosk-Modus (kiosk.js für Gäste, kiosk-admin.js für die Box «Kiosk» im Admin, Datenschutzseite aus kiosk.py) */
+html.kiosk .kOff, html.kiosk .paneStd { display:none !important; }
+
+/* Startseite */
+html.kWait body { visibility:hidden; }
+/* Karte ohne App (Mockup kiosk.html S1-S3): Start bis Datenschutz bestaetigt, Pause, voll */
+.kGate { display:none; }
+html.kClosed body > :not(.kPause):not(#toast), html.kStart body > :not(.kStartGate):not(#toast) { display:none !important; }
+html.kClosed .kPause, html.kStart .kStartGate { display:flex; }
+.kGate { position:fixed; inset:0; overflow:auto; flex-direction:column; align-items:center; justify-content:safe center; padding:20px; box-sizing:border-box; }
+.kGateCard { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:32px 28px; width:100%; max-width:400px;
+  text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.15); box-sizing:border-box; flex:none; }
+.kGateLogo { height:65px; display:flex; justify-content:center; align-items:center; margin-bottom:18px; }
+.kGateLogo img { width:65px; height:65px; display:block; }
+.kGateLogo .dk, :root[data-theme=dark] .kGateLogo .lt { display:none; } :root[data-theme=dark] .kGateLogo .dk { display:block; }
+.kGateCard .kicker { color:var(--muted); font-size:13px; letter-spacing:.06em; text-transform:uppercase; margin:0 0 18px; }
+.kGateCard h1 { font-size:22px; margin:0 0 12px; font-weight:600; overflow-wrap:anywhere; }
+.kGateCard .s { margin:12px 0 8px; } .kGateCard .h { margin:0; color:var(--muted); font-size:15px; } .kGateCard .kSmall { font-size:13px; }
+.kGateFoot { margin:14px 0 0; text-align:center; color:var(--muted); font-size:13px; flex:none; } .kGateFoot a { color:var(--muted); }
+.kChips { list-style:none; padding:0; margin:10px 0 14px; display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+.kChips li { font-size:13px; padding:2px 10px; border-radius:999px; background:color-mix(in srgb, var(--accent) 12%, transparent); }
+.kConsent { display:flex; gap:10px; align-items:flex-start; text-align:left; font-size:14px; line-height:1.4; margin:6px 0 0;
+  padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); cursor:pointer; }
+.kConsent input { margin:2px 0 0; flex:none; width:18px; height:18px; }
+.kGateCard .kGo { width:100%; margin:14px 0 8px; }
+.kGateCard .kErr { background:color-mix(in srgb, var(--err) 12%, transparent); color:var(--err); border-radius:8px; padding:10px 12px; font-size:14px; margin:0 0 14px; text-align:left; }
+.kDemo { position:relative; aspect-ratio:4/3; width:100%; max-width:300px; margin:0 auto; border-radius:8px; overflow:hidden; background:#202326; --img:url(/brand/kiosk-demo.jpg); }
+.kDemo i { position:absolute; width:20%; height:25%; left:calc(var(--x) * .8); top:calc(var(--y) * .75); background-image:var(--img);
+  background-size:500% 400%; background-position:var(--x) var(--y); box-shadow:inset 0 0 0 .5px rgba(255,255,255,.35);
+  animation:kFly 7s var(--d) infinite both ease-out; }
+.kDemo::before { content:""; position:absolute; inset:0; background:var(--img) center/100% 100%; opacity:.15; }
+@keyframes kFly { 0%,8% { transform:translate(var(--dx),var(--dy)) rotate(var(--r)); opacity:0; }
+  30%,85% { transform:none; opacity:1; } 100% { transform:none; opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .kDemo i { animation:none; } }  /* Pause/voll (S2/S3): ohne linke Spalte, Karte in der Mitte */
+.kStart { margin-top:14px; display:flex; flex-direction:column; gap:12px; max-width:62ch; }
+.kSteps { margin:0; padding-left:1.4em; display:flex; flex-direction:column; gap:4px; }
+.kNotice { margin:0; padding:10px 12px; border:1px solid var(--err); border-radius:8px; color:var(--err); }
+.kOk { display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
+.kOk input { width:20px; height:20px; margin:2px 0 0; flex:none; accent-color:var(--accent); }
+.kGo { align-self:flex-start; min-width:180px; }
+.kGo:disabled { opacity:.5; cursor:not-allowed; }
+.kFacts { margin:0; }
+.kFoot { margin:4px 0 0; font-size:13px; }
+
+/* Teilen: QR-Code und Bearbeitungslink */
+.kQrBox { display:flex; flex-direction:column; align-items:center; gap:6px; margin:0 0 12px; }
+.kQrImg { width:min(240px, 70vw); }
+.kQr { display:block; width:100%; height:auto; border-radius:8px; border:1px solid var(--line); }
+.kEdit { margin-top:16px; padding-top:12px; border-top:1px solid var(--line); }
+.kEdit h3 { margin:0 0 4px; font-size:15px; }
+.kEdit .linkRow code { word-break:break-all; }
+.kDraftDel { margin-top:12px; }
+
+/* Admin: Box «Kiosk» und Panel PK */
+.kStatusHead { cursor:pointer; }
+#kStatusBox .muted { margin:4px 0 0; }
+.kStats { width:100%; border-collapse:collapse; font-size:13px; margin:6px 0; }
+.kStats th, .kStats td { text-align:right; padding:3px 6px; border-bottom:1px solid var(--line); }
+.kStats th:first-child, .kStats td:first-child { text-align:left; }
+.kNums { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; margin:6px 0 10px; }
+.kNums div { border:1px solid var(--line); border-radius:8px; padding:8px; }
+.kNums b { display:block; font-size:20px; }
+.kNums span { color:var(--muted); font-size:12px; }
+.kPk textarea, #kSettings textarea { width:100%; min-height:180px; font:inherit; }
+#kSettings input[type=text] { width:100%; }
+.kPk h3 { margin:16px 0 4px; font-size:15px; }
+
+/* Datenschutzseite */
+body.kPrivacy main { max-width:68ch; margin:0 auto; padding:24px 18px 48px; display:block; }
+body.kPrivacy h1 { margin:8px 0 12px; }
+body.kPrivacy h2 { margin:20px 0 6px; font-size:17px; }
+
+.kPurge { align-items:center; } .kPurge .lbl { margin:0; } .kPurge input { width:5em; }
+
+/* Drei Schritte Foto · Gestalten · Teilen (Roger 23.11.2026, Mockup kiosk.html «V»): ein Panel in der Mitte, keine Startspalte */
+html.kFlow main > .left, html.kFlow #crumbs, html.kFlow .mkP .paneHead .num, html.kFlow .mkP .paneHead .tick { display:none !important; }
+html.kFlow main { justify-content:center; }
+html.kFlow main > .mkP.on:not(.top) { display:none !important; }
+html.kFlow main > .mkP.on { flex:0 1 560px; width:560px; max-width:100%; }
+@media (min-width:861px) { html.kFlow main > #sidePieces.on { flex-basis:1000px; width:1000px; } }
+html.kFlow :is(#sideMotif, #sidePieces, #sideShareNow) > .paneHead .paneX,
+html.kFlow :is(#sideMotif, #sidePieces, #sideShareNow) > .stepRow > .paneDone { display:none; }
+html.kFlow .stepRow .lg { display:inline !important; } html.kFlow .stepRow .sm { display:none !important; }
+html.kFlow .stepRow > .stepPrev, html.kFlow .stepRow > .stepNext { flex:1 1 0 !important; font-size:inherit !important; }
+html.kFlow .stepRow > .invisible { display:none; }
+html.kFlow .stepRow > button:disabled { opacity:.5; cursor:not-allowed; }
+/* Fortschritt «Schritt 2 von 3» */
+.kProg { display:flex; flex-direction:column; gap:6px; margin:-4px 0 12px; }
+.kProgN { color:var(--muted); font-size:13px; }
+.kProg ol { list-style:none; margin:0; padding:0; display:flex; gap:6px; }
+.kProg li { flex:1; } .kProg li button { width:100%; margin:0; padding:4px 6px; font-size:13px; border-radius:999px; }
+.kProg li.on button { background:var(--accent); color:var(--on-accent); border-color:var(--accent); font-weight:600; }
+.kProg li.done button::before { content:"✓ "; color:var(--ok); }
+/* 1 Foto: gewähltes Foto gross */
+#motifBody > #motifNow { flex-direction:column; align-items:stretch; margin:0 0 12px; }
+#motifBody > #motifNow img { width:100%; height:auto; max-height:45vh; object-fit:contain; background:var(--bg); border-radius:8px; }
+/* 2 Gestalten: Vorschau rechts (Handy oben), Einstellungen links */
+.kGest { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:18px; align-items:start; }
+.kGest .kPv { position:sticky; top:0; }
+.kGest .kPv .player { margin-top:8px; }
+.kCtl > .lbl:first-child { margin-top:0; }
+.kCtl textarea { width:100%; box-sizing:border-box; font:inherit; }
+@media (max-width:860px) {
+  .kGest { grid-template-columns:1fr; gap:12px; }
+  .kGest .kPv { order:-1; position:static; }
+  .kGest .kPv .tableWrap { aspect-ratio:4/3 !important; }
+}
+.kMore { margin-top:14px; border-top:1px solid var(--line); padding-top:8px; }
+.kMore > summary { cursor:pointer; font-weight:600; padding:4px 0; }
+.kMore[open] > summary { margin-bottom:6px; }
+.kMore .paneSection { margin:12px 0 2px; font-size:14px; }
+.kFonts { display:flex; gap:6px; flex-wrap:wrap; } .kFonts button { margin:0; }
+.kFonts button.on { border-color:var(--accent); color:var(--accent); }
+/* 3 Teilen */
+.kReady { text-align:center; margin:0 0 12px; }
+.kReady h3 { margin:0 0 2px; font-size:20px; } .kReady h3::before { content:"✓ "; color:var(--ok); }
+.kReady p { margin:0; }
+.kSaved { display:flex; gap:10px; align-items:flex-start; margin:10px 0 0; cursor:pointer; font-size:14px; }
+.kSaved input { width:18px; height:18px; margin:2px 0 0; flex:none; accent-color:var(--accent); }
+.kDanger { margin-top:16px; padding-top:12px; border-top:1px solid var(--line); }
+.kAsk { margin:8px 0 0; padding:10px 12px; border:1px solid var(--err); border-radius:8px; }
+.kAsk p { margin:0 0 8px; }
+.kCont { display:block; margin:12px 0 0; font-size:14px; }
+@media (max-width:860px) { html.kFlow .kQrBox { display:none; } }  /* am Handy: Link teilen statt QR */
+html.kFlow #mkFrameNote { display:none !important; }  /* verweist auf die alte Schrittnummer */

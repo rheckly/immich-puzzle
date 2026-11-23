@@ -27,8 +27,8 @@ Danach http://127.0.0.1:8112 öffnen. Die Attrappe liefert nur farbige Testbilde
 ## Testversion und Release
 
 `bash scripts/deploy-nas.sh` bringt den Arbeitsstand aufs NAS (Tests, Kopie, Neustart, Versionsprüfung). Das Skript
-bleibt lokal (`.git/info/exclude`), ebenso die NAS-Fassung der Compose-Datei (`compose.nas.yaml`). Ablauf und Regeln:
-[RELEASE.md](RELEASE.md).
+bleibt lokal (`.git/info/exclude`), ebenso die NAS-Fassung der Compose-Datei (`compose.nas.yaml`). Ein Release ist
+ein Tag `vX.Y.Z` auf `main`: `.github/workflows/release.yml` prüft Version und CHANGELOG und baut beide Images.
 
 ## Auf dem NAS
 

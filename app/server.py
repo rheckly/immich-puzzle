@@ -13,15 +13,19 @@ import io
 import json
 import math
 import os
+import random
 import re
 import secrets
 import shutil
+import signal
+import sys
 import threading
 import time
 import traceback
 import unicodedata
 import urllib.parse
 import uuid
+import warnings
 from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,8 +34,10 @@ from PIL import Image, ImageOps
 
 import auth as login
 import family
+import render
 from immich import Immich, ImmichError, check_id
 from msg import Msg, fields, of
+from notify import Notifier, RunMarker, clean_time
 
 try:
     import mutagen  # Länge der Musikstücke; fehlt es, misst die Seite selbst
@@ -39,8 +45,8 @@ except ImportError:  # pragma: no cover
     mutagen = None
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSION = "0.1.7"  # bei jedem Build hochzählen, zuoberst in app/CHANGELOG.md gleich
-VERSION_DATE = "22.11.2026"
+VERSION = "0.1.19"  # bei jedem Build hochzählen, zuoberst in app/CHANGELOG.md gleich
+VERSION_DATE = "23.11.2026"
 
 
 # ---------- Changelog für das Panel «Über» (Entscheid 43) ----------
@@ -87,7 +93,7 @@ def read_changelog(path=CHANGELOG_FILE):
 
 
 BRAND_DIR = os.path.join(APP_DIR, "brand")  # Logos der Familienmarke, Dateien *-puzzle.*
-BRAND_TYPES = {".svg": "image/svg+xml", ".png": "image/png"}
+BRAND_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg"}
 
 
 def brand_file(name):
@@ -120,6 +126,10 @@ def text_files():
 
 # ---------- Live-Link: ein Puzzle zum Abspielen auf einem zweiten Port (wie in Collage) ----------
 VIEW_DAYS = 365  # So viele Tage Aufrufe pro Tag behalten (Entscheid 37)
+ALERT_KINDS = ("errors", "summary")  # Meldungen über ntfy (0.1.18): je Art ein Schalter, Werkseinstellung an
+ALERT_TIME = "08:00"  # Tageszusammenfassung für den Vortag
+HEARTBEAT = 60  # Sekunden: Takt der Meldeschleife (Lebenszeichen in run.json, Tageszusammenfassung)
+WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
 
 
 def count_day(days, now):
@@ -142,10 +152,24 @@ def day_end(day):
     return datetime(day.year, day.month, day.day, 23, 59, 59).timestamp()
 
 
-def link_expiry(body, now=None):
+def day_start(ts):
+    """Beginn des Tages eines Zeitstempels, 00:00:00 Lokalzeit, als Epoch."""
+    d = datetime.fromtimestamp(ts).date()
+    return datetime(d.year, d.month, d.day).timestamp()
+
+
+def link_from(link):
+    """Gültig ab eines Links (Roger 22.11.2026: jeder Link hat ein Datum, Standard heute);
+    ältere Links ohne Datum gelten ab dem Tag, an dem sie erstellt wurden."""
+    return link.get("valid_from") or (day_start(link["created"]) if link.get("created") else None)
+
+
+def link_expiry(body, now=None, start=None):
     """Ablauf aus days ("today", 1, 7, 30, 60, 90, 365, 0) oder until (JJJJ-MM-TT, frühestens heute).
+    Die Tage zählen ab «Gültig ab» (start), frühestens ab heute (Roger 22.11.2026).
     Gibt (expires, days) zurück; jeder Ablauf endet am Tagesende, 0 = ohne Ablauf."""
     today = datetime.fromtimestamp(now if now is not None else time.time()).date()
+    base = max(today, datetime.fromtimestamp(start).date()) if start else today
     if body.get("until"):
         try:
             until = datetime.strptime(str(body["until"]), "%Y-%m-%d").date()
@@ -164,21 +188,22 @@ def link_expiry(body, now=None):
         raise ValueError(Msg("unknownValidity", "Unbekannte Gültigkeit."))
     if days == 0:
         return None, 0
-    return day_end(today + timedelta(days=0 if days == "today" else days)), days
+    return day_end(base + timedelta(days=0 if days == "today" else days)), days
 
 
 def link_start(value, now=None):
-    """Gültig ab (Entscheid 39): JJJJ-MM-TT, frühestens heute, gilt ab 00:00:00 Lokalzeit. Heute oder leer = sofort (None)."""
-    if not value:
-        return None
+    """Gültig ab (Entscheid 39): JJJJ-MM-TT, frühestens heute, gilt ab 00:00:00 Lokalzeit.
+    Leer = heute; seit 0.1.8 immer als Datum gespeichert (Roger 22.11.2026)."""
     today = datetime.fromtimestamp(now if now is not None else time.time()).date()
+    if not value:
+        return datetime(today.year, today.month, today.day).timestamp()
     try:
         start = datetime.strptime(str(value), "%Y-%m-%d").date()
     except ValueError:
         start = None
     if not start or start < today:
         raise ValueError(Msg("unknownStart", "Unbekanntes Startdatum: frühestens heute."))
-    return None if start == today else datetime(start.year, start.month, start.day).timestamp()
+    return datetime(start.year, start.month, start.day).timestamp()
 
 
 class NotActive(KeyError):
@@ -199,6 +224,10 @@ class BaseAddress(KeyError):
         super().__init__("base")
 
 
+class TooLarge(ValueError):
+    """Anfrage grösser als erlaubt: 413 (Sicherheitsprüfung Kiosk 0.1.9)."""
+
+
 class FieldError(ValueError):
     """Ungültiges Feld beim Ändern aus Smart Albums (Entscheid 48): 400 mit {"error", "field"}."""
     def __init__(self, field, message):
@@ -206,10 +235,12 @@ class FieldError(ValueError):
         self.field = field
 
 
-# Was Smart Albums an einem Puzzle-Link ändern darf (Entscheid 48, Passwort ab Entscheid 49, Metadaten ab Entscheid 50)
-SHARE_ACTIONS = ["expiry", "validFrom", "password", "download", "metadata", "off", "delete"]
+# Was Smart Albums an einem Puzzle-Link ändern darf (Entscheid 48, Passwort ab Entscheid 49, Metadaten ab Entscheid 50).
+# Ab 0.1.17: download = Foto, video = Video (getrennt), share = «Teilen erlauben» (Vorgabe aus, noch ohne Anzeige)
+SHARE_ACTIONS = ["expiry", "validFrom", "password", "download", "video", "share", "metadata", "off", "delete"]
 PATCH_FIELDS = {"expires": "expiry", "validFrom": "validFrom", "password": "password", "download": "download",
-                "metadata": "metadata", "active": "off"}
+                "video": "video", "share": "share", "metadata": "metadata", "active": "off"}
+LINK_FLAGS = ("download", "video", "share")  # Schalter am Link, Vorgabe aus
 
 # Passwort für Live-Links (Entscheid 49): nur als Hash in share_passwords.json, nie in job.json oder einer Antwort
 PW_MIN = 4
@@ -258,10 +289,14 @@ def parse_utc(value, field):
 
 
 def set_active(link, on):
-    """Link ein- oder ausschalten (Entscheid 48). Gespeichert wird nur «aus», ältere Links gelten als aktiv."""
+    """Link ein- oder ausschalten (Entscheid 48). Gespeichert wird nur «aus», ältere Links gelten als aktiv.
+    off_since: seit wann aus (Shares-API offSince), bleibt beim erneuten Ausschalten, fällt beim Einschalten weg."""
     if on:
         link.pop("active", None)
+        link.pop("off_since", None)
     else:
+        if link.get("active") is not False:
+            link["off_since"] = time.time()
         link["active"] = False
 
 
@@ -279,6 +314,40 @@ def set_metadata(link, on):
         link.pop("metadata", None)
     else:
         link["metadata"] = False
+
+
+# Protokoll (Vorlage Smart Albums): wann, wer, was, in protocol.jsonl, die letzten PROTOCOL_KEEP Einträge.
+# Ein Eintrag hat einen Code (what) und Werte (vars), den Text macht die Oberfläche in ihrer Sprache (log.<what>).
+# Wer: role admin (angemeldet, who = Name), smart (Smart Albums über die Shares-API), visitor (Live-Link), system.
+PROTOCOL_KEEP = 2000
+PROTOCOL_MERGE = 10 * 60  # Automatisches Speichern: dasselbe Puzzle, derselbe Wer, innert 10 Minuten = ein Eintrag
+_actor = threading.local()
+
+
+def set_actor(role, who=""):
+    _actor.role, _actor.who = role, str(who or "")[:80]
+
+
+def actor():
+    return getattr(_actor, "role", "system"), getattr(_actor, "who", "")
+
+
+def link_changes(old, new, password_set=...):
+    """Was sich an einem Live-Link geändert hat, als Codes fürs Protokoll (log.f.<code>)."""
+    out = []
+    flags = [(k, lambda l, k=k: bool(l.get(k))) for k in LINK_FLAGS]
+    for key, flag in (*flags, ("metadata", link_metadata), ("active", link_active)):
+        if flag(old) != flag(new):
+            out.append(f"{key}:{'on' if flag(new) else 'off'}")
+    if password_set is not ...:
+        out.append("password:" + ("removed" if password_set is None else "set"))
+    if link_from(old) != link_from(new):
+        out.append("validFrom")
+    if old.get("expires") != new.get("expires"):
+        out.append("expires")
+    if old.get("title") != new.get("title"):
+        out.append("title")
+    return out
 
 
 # JPEG-Segmente mit Metadaten: APP1 (EXIF mit GPS, XMP), APP13 (IPTC/Photoshop), COM. Das Farbprofil (APP2) bleibt
@@ -360,12 +429,28 @@ def start_text(start, lang):
         return f"This link is valid from {day.day} {day.strftime('%b')} {day.year}."
     return f"Dieser Link ist ab {day:%d.%m.%Y} gültig."
 VIEW_WINDOW = 30 * 60  # Dieselbe IP zählt auf einem Live-Link nur einmal in 30 Minuten
+VISITOR_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")  # Zufalls-Kennung des Besuchers aus dem Browser (Like, 0.1.8)
+LIKES_MAX = 10000  # Obergrenze gespeicherter Like-Kennungen pro Link
 # Bots, Crawler und Link-Vorschauen der Messenger zählen nicht als Aufruf
 VIEW_BOTS = re.compile(r"bot|crawl|spider|slurp|preview|facebookexternalhit|facebot|whatsapp|telegram|slack|discord|"
                        r"twitter|linkedin|skype|signal|viber|embedly|pinterest|vkshare|mastodon|bluesky|iframely|"
                        r"headless|lighthouse|curl|wget|python|go-http|java/|okhttp|axios|node-fetch|httpclient|"
                        r"scan|monitor|uptime|check", re.I)
 SHARE_HEADERS = {"Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow"}
+
+
+def with_nonce(page, nonce):
+    """Alle <script>-Tags der Seite mit der Nonce versehen (Seiten mit strenger CSP)."""
+    return page.replace("<script", f'<script nonce="{nonce}"')
+
+
+def page_csp(nonce, umami=""):
+    """Strenge CSP für Gäste-Editor und Abspielseite (Sicherheitsprüfung Kiosk 0.1.9): Skripte nur eigene und mit
+    Nonce, dazu Umami; keine Einbettung in fremde Seiten."""
+    extra = f" {umami}" if umami else ""
+    return (f"default-src 'self'; script-src 'self' 'nonce-{nonce}'{extra}; style-src 'self' 'unsafe-inline'; "
+            f"img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'{extra}; "
+            f"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 CARD_MAX_BYTES = 200 * 1024  # WhatsApp zeigt grössere Vorschaubilder nicht an (Grenze etwa 300 KB)
 CARD_TEXT = {"de": "Ein Foto-Puzzle, das sich von selbst zusammensetzt", "en": "A photo puzzle that puts itself together"}
 # Hinweisseite geteilter Link (Entscheid 52, Design-Vorlage Kap. 7): Fall → Status, Umami-Grund, Titel / Satz / Hilfesatz.
@@ -437,12 +522,17 @@ COUNTS = (24, 48, 100, 200, 500)  # Anzahl Teile
 FORMATS = {"photo": 0, "free": 0, "1:1": 1, "4:3": 4 / 3, "3:2": 3 / 2, "16:9": 16 / 9, "3:4": 3 / 4, "2:3": 2 / 3,
            "9:16": 9 / 16}  # Ausschnitt, «photo» = wie das Foto, «free» = frei gezogen (das Foto ist schon zugeschnitten)
 STARTS = ("scatter", "heap", "mix")  # Startlage: verstreut, Haufen, gemischt
+EDGES = ("classic", "round")  # Form der Nasen (0.1.15): organisch (Standard, Form bis 0.1.14) oder klassisch (gerade bis zur Nase); fehlt = organisch
 DUR_MODES = ("music", "own")  # Dauer wie die Musik (höchstens MAX_T) oder eigene Sekunden
 HOLD_MIN, HOLD_MAX = 2, 10  # So lange bleibt das fertige Bild stehen (Sekunden, heranzoomen)
 TEMPO_MAX = 2  # Stärke des Tempo-Bogens (0 = gleichmässig, 2 = sehr stark)
 FRAME_AT = (15, 70, 40)  # Rahmen fertig nach … % der Zeit bis «fertig» (min, max, Vorgabe)
 RAMP = (0, 60, 5)  # Schneller werden ab … % der Zeit
+LEAD = (0, 10, 1.5)  # Start nach … Sekunden (0.1.8); fehlt bei älteren Puzzles, dann gilt der bisherige Start
 TEXT_SIZE = (50, 200, 100)  # Schriftgrösse in %
+GHOST_PCT = (5, 60, 15)  # Deckkraft des Motivs beim Start in % (E1, 0.1.8)
+TEXT_ARC = (-100, 100, 0)  # Bogen des Schriftzugs, 0 = gerade, + nach oben gewölbt (C1, 0.1.8)
+TEXT_ROT = (-45, 45, 0)  # Drehung des Schriftzugs in Grad (C2, 0.1.8)
 TEXT_MODES = ("in", "end")  # Text im Puzzle (in den Teilen) oder erscheint am Schluss
 # Schriften: 8 aus dem System, 13 aus Collage (app/fonts, Lizenzen OFL/Apache daneben)
 FONT_FILES = {"roboto": "Roboto-Bold", "sourceserif": "SourceSerifPro-Semibold", "amatic": "AmaticSC-Bold",
@@ -458,8 +548,17 @@ MIN_T, MAX_T = 10, 60  # Sekunden
 TEXT_MAX = 300
 MAX_BODY = 16 * 1024 * 1024  # Foto als data:-URL im JSON
 PHOTO_SIDE = 1600  # Längste Seite des gespeicherten Fotos
+# Schutz vor Dekompressionsbomben (Sicherheitsprüfung Kiosk 0.1.9): höchstens 40 MP, nur JPEG/PNG/WEBP,
+# höchstens zwei Fotos gleichzeitig dekodieren (Speicher und CPU)
+MAX_PIXELS = 40_000_000
+Image.MAX_IMAGE_PIXELS = MAX_PIXELS
+warnings.simplefilter("error", Image.DecompressionBombWarning)
+PHOTO_FORMATS = ("JPEG", "PNG", "WEBP")
+DECODE_SLOTS = threading.BoundedSemaphore(2)
 THUMB_SIDE = 360
 CARD_SIZE = (1200, 630)
+# Ab 0.1.8 zeigt das Vorschaubild das Puzzle (Teile, drei fehlen noch); ältere card.jpg werden beim Abruf neu erstellt
+CARD_PUZZLE_SINCE = datetime(2026, 11, 22, 12, tzinfo=timezone.utc).timestamp()
 MUSIC_TYPES = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac", ".wav": "audio/wav",
                ".ogg": "audio/ogg", ".flac": "audio/flac"}
 MAX_MUSIC = 30 * 1024 * 1024
@@ -468,6 +567,57 @@ MUSIC_UPLOAD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.()-]{0,120}$")
 
 def bad_setting(field):
     return ValueError(Msg("badSetting", "Ungültige Einstellung «{field}».", field=field))
+
+
+STEP_CHOICE = ("crop", "music", "puzzle", "dur", "text", "view")  # Schritte, die man selber einstellen oder beim Standard lassen kann
+FOR_MAX, NOTE_MAX = 120, 2000
+
+
+def clean_steps(steps):
+    """Welche Schritte selber eingestellt werden (Panel «Puzzle Details»). Fehlt ein Schritt, gilt «selber»."""
+    if steps is None:
+        return None
+    if not isinstance(steps, dict):
+        raise bad_setting("steps")
+    return {k: bool(steps.get(k, True)) for k in STEP_CHOICE}
+
+
+def clean_details(body):
+    """Für wen / Anlass, interne Notiz und Schrittwahl eines Puzzles. Nur Felder, die im Body stehen."""
+    out = {}
+    if "forWhom" in body:
+        out["for"] = " ".join(str(body.get("forWhom") or "").split())[:FOR_MAX]
+    if "note" in body:
+        note = body.get("note") or ""
+        if not isinstance(note, str):
+            raise bad_setting("note")
+        out["note"] = note.replace("\r", "")[:NOTE_MAX].strip()
+    if "steps" in body:
+        out["steps"] = clean_steps(body.get("steps"))
+    return out
+
+
+def clean_defaults(d):
+    """Standard für neue Puzzles: Einstellungen ohne Seed, Titel und Text des Schriftzugs, dazu die Schrittwahl."""
+    if not isinstance(d, dict):
+        raise bad_setting("defaults")
+    config = clean_config(d.get("config") or {})
+    for key in ("seed", "title", "text"):
+        config.pop(key, None)
+    if "edges" not in (d.get("config") or {}):
+        config.pop("edges", None)  # Standard von vor 0.1.15 ohne «edges»: neue Puzzles nehmen die Form des Editors (organisch)
+    return {"config": config, "steps": clean_steps(d.get("steps") or {})}
+
+
+def clean_url(url, field):
+    """Eine http(s)-Adresse ohne Query und Fragment, höchstens 300 Zeichen. Leer bleibt leer."""
+    url = str(url or "").strip()
+    if not url:
+        return ""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.query or parts.fragment or len(url) > 300:
+        raise ValueError(Msg("urlInvalid", "Die Adresse muss mit https:// beginnen, zum Beispiel https://example.com."))
+    return url.rstrip("/")
 
 
 def clean_config(c):
@@ -487,26 +637,42 @@ def clean_config(c):
             raise bad_setting(key)
         return value
 
-    if c.get("textPos") in OLD_TEXT_POS:
-        c = {**c, "textPos": OLD_TEXT_POS[c["textPos"]]}
-    text = c.get("text") or ""
-    if not isinstance(text, str):
-        raise bad_setting("text")
-    text = "\n".join(" ".join(line.split()) for line in text.replace("\r", "").split("\n"))[:TEXT_MAX].rstrip("\n")  # Leerzeilen am Anfang bleiben, sie schieben den Schriftzug nach unten (Roger 21.11.2026)
+    # Position: alte Werte (bis 0.1.2) umwandeln, leer oder null gilt als Mitte (0.1.9)
+    for key in ("textPos", "greetPos"):
+        if key in c and not c[key]:
+            c = {**c, key: "mc"}
+        elif c.get(key) in OLD_TEXT_POS:
+            c = {**c, key: OLD_TEXT_POS[c[key]]}
+    def clean_text(key):
+        value = c.get(key) or ""
+        if not isinstance(value, str):
+            raise bad_setting(key)
+        # Leerzeilen am Anfang bleiben, sie schieben den Schriftzug nach unten (Roger 21.11.2026)
+        return "\n".join(" ".join(line.split()) for line in value.replace("\r", "").split("\n"))[:TEXT_MAX].rstrip("\n")
+
+    text = clean_text("text")
     title = c.get("title") or ""
     if not isinstance(title, str):
         raise bad_setting("title")
     out = {
         "count": pick("count", COUNTS, 100), "format": pick("format", tuple(FORMATS), "photo"),
-        "start": pick("start", STARTS, "scatter"), "rot": bool(c.get("rot")), "frame": bool(c.get("frame", True)),
-        "ghost": bool(c.get("ghost")), "seed": int(number("seed", 0, 2 ** 31, 4711)),
+        "start": pick("start", STARTS, "scatter"), "edges": pick("edges", EDGES, "round"), "rot": bool(c.get("rot")), "frame": bool(c.get("frame", True)),
+        "ghost": bool(c.get("ghost")), "ghostPct": int(number("ghostPct", *GHOST_PCT)), "seed": int(number("seed", 0, 2 ** 31, 4711)),
         "tempo": round(float(number("tempo", 0, TEMPO_MAX, 0.5)), 3), "durMode": pick("durMode", DUR_MODES, "own"),
         "T": round(float(number("T", MIN_T, MAX_T, 45)), 2), "hold": int(number("hold", HOLD_MIN, HOLD_MAX, 5)),
         "frameAt": int(number("frameAt", *FRAME_AT)), "ramp": int(number("ramp", *RAMP)),
         "title": clean_title(title), "text": text, "textMode": pick("textMode", TEXT_MODES, "in"),
         "textFont": pick("textFont", TEXT_FONTS, "hand"), "textSize": int(number("textSize", *TEXT_SIZE)),
         "textPos": pick("textPos", TEXT_POS, "mc"), "textColor": text_color(c.get("textColor", "#ffffff")),
+        "textArc": int(number("textArc", *TEXT_ARC)), "textRot": int(number("textRot", *TEXT_ROT)),
+        # Grussbotschaft auf dem leeren Tisch (C3, 0.1.8): gleiche Einstellungen wie der Schriftzug auf dem fertigen Puzzle
+        "greet": clean_text("greet"), "greetFont": pick("greetFont", TEXT_FONTS, "hand"),
+        "greetSize": int(number("greetSize", *TEXT_SIZE)), "greetPos": pick("greetPos", TEXT_POS, "mc"),
+        "greetColor": text_color(c.get("greetColor", "#ffffff"), "greetColor"),
+        "greetArc": int(number("greetArc", *TEXT_ARC)), "greetRot": int(number("greetRot", *TEXT_ROT)),
     }
+    if c.get("lead") is not None:
+        out["lead"] = round(float(number("lead", *LEAD)), 2)
     music = c.get("music")
     if music is None:
         out["music"] = None
@@ -521,9 +687,9 @@ def clean_config(c):
     return out
 
 
-def text_color(value):
+def text_color(value, key="textColor"):
     if not isinstance(value, str) or not TEXT_COLOR.match(value):
-        raise bad_setting("textColor")
+        raise bad_setting(key)
     return value.lower()
 
 
@@ -533,17 +699,28 @@ def _unit(value):
     return value
 
 
+def open_photo(data, max_pixels=None):
+    """Bild öffnen, nur JPEG/PNG/WEBP, Grösse sofort prüfen (vor dem Dekodieren). ValueError, wenn zu gross."""
+    img = Image.open(io.BytesIO(data), formats=PHOTO_FORMATS)
+    if img.width * img.height > (max_pixels or MAX_PIXELS):
+        img.close()
+        raise ValueError("too many pixels")
+    return img
+
+
 def decode_photo(value):
     """data:image/…;base64,… vom Editor → JPEG ohne Metadaten, längste Seite höchstens PHOTO_SIDE, und das Bild."""
     if not isinstance(value, str) or not value.startswith("data:image/") or ";base64," not in value[:40]:
         raise ValueError(Msg("badPhoto", "Das Foto fehlt oder ist kein Bild."))
     try:
         data = base64.b64decode(value.split(",", 1)[1], validate=True)
-        with Image.open(io.BytesIO(data)) as img:
+        with DECODE_SLOTS, open_photo(data) as img:
+            if img.format == "JPEG":
+                img.draft("RGB", (PHOTO_SIDE, PHOTO_SIDE))  # JPEG gleich verkleinert dekodieren
             img = ImageOps.exif_transpose(img).convert("RGB")
+            img.thumbnail((PHOTO_SIDE, PHOTO_SIDE))
     except Exception:
         raise ValueError(Msg("badPhoto", "Das Foto fehlt oder ist kein Bild."))
-    img.thumbnail((PHOTO_SIDE, PHOTO_SIDE))
     out = io.BytesIO()
     img.save(out, "JPEG", quality=90)  # Neu gespeichert: kein EXIF, kein GPS
     return out.getvalue(), img
@@ -554,9 +731,96 @@ def cover(img, size):
     return ImageOps.fit(img, size, Image.LANCZOS)
 
 
-def card_bytes(img):
-    """Vorschaubild für Messenger: 1200 × 630, höchstens CARD_MAX_BYTES."""
-    card = cover(img, CARD_SIZE)
+# Nasen wie EDGE_SEGS in puzzle-engine.js: gerade bis u = a, Bézier-Stücke, gerade ab u = b
+EDGE_SEGS = {
+    "round": (0, 1, (((.30, 0), (.40, .02), (.38, .10)), ((.30, .20), (.36, .30), (.50, .30)),
+                     ((.64, .30), (.70, .20), (.62, .10)), ((.60, .02), (.70, 0), (1, 0)))),
+    "classic": (.37, .63, (((.37, .035), (.40, .05), (.39, .09)), ((.30, .14), (.31, .28), (.50, .28)),
+                           ((.69, .28), (.70, .14), (.61, .09)), ((.60, .05), (.63, .035), (.63, 0)))),
+}
+
+
+def _piece_outline(x, y, cw, ch, sides, edges="round"):
+    """Umriss eines Puzzleteils als Punktliste, gleiche Nasen wie edgePath in puzzle-engine.js."""
+    start, end, segs = EDGE_SEGS.get(edges, EDGE_SEGS["round"])
+    tab = min(cw, ch)
+    x0, y0, x1, y1 = x * cw, y * ch, (x + 1) * cw, (y + 1) * ch
+    corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0))
+    pts = [corners[0]]
+    for i, s in enumerate(sides):
+        (ax, ay), (bx, by) = corners[i], corners[i + 1]
+        dx, dy = bx - ax, by - ay
+        if not s:
+            pts.append((bx, by))
+            continue
+        length = math.hypot(dx, dy)
+        ox, oy = dy / length * tab * s, -dx / length * tab * s
+        p = lambda u, v: (ax + u * dx + v * ox, ay + u * dy + v * oy)
+        if start:
+            pts.append(p(start, 0))
+        cur = pts[-1]
+        for a, b, c in segs:
+            a, b, c = p(*a), p(*b), p(*c)
+            for k in range(1, 9):
+                t = k / 8
+                pts.append(tuple((1 - t) ** 3 * cur[j] + 3 * (1 - t) ** 2 * t * a[j] + 3 * (1 - t) * t * t * b[j] + t ** 3 * c[j]
+                                 for j in range(2)))
+            cur = c
+        if end < 1:
+            pts.append((bx, by))
+    return pts
+
+
+def puzzle_card(card, seed=0, edges="round"):
+    """Vorschaubild als Puzzle: Teile-Linien über dem Foto, rechts unten fehlen noch drei Teile (Roger 22.11.2026)."""
+    from PIL import ImageDraw
+    rnd = random.Random(seed)
+    w, h = card.size
+    rows = 4
+    cols = max(2, round(rows * w / h))
+    cw, ch = w / cols, h / rows
+    hs = [[rnd.choice((1, -1)) for _ in range(cols + 1)] for _ in range(rows + 1)]
+    vs = [[rnd.choice((1, -1)) for _ in range(cols + 1)] for _ in range(rows + 1)]
+
+    def sides(x, y):
+        return (0 if y == 0 else -hs[y][x], 0 if x == cols - 1 else vs[y][x + 1],
+                0 if y == rows - 1 else hs[y + 1][x], 0 if x == 0 else -vs[y][x])
+    missing = {(cols - 2, rows - 1), (cols - 1, rows - 1), (cols - 1, rows - 2)}
+    lines = Image.new("RGBA", card.size, (0, 0, 0, 0))
+    g = ImageDraw.Draw(lines)
+    for y in range(rows):
+        for x in range(cols):
+            if (x, y) in missing:
+                g.polygon(_piece_outline(x, y, cw, ch, sides(x, y), edges), fill=(35, 39, 42, 255))
+    for y in range(rows):
+        for x in range(cols):
+            if (x, y) in missing:
+                continue
+            pts = _piece_outline(x, y, cw, ch, sides(x, y), edges)
+            g.line(pts, fill=(255, 255, 255, 80), width=4, joint="curve")
+            g.line(pts, fill=(0, 0, 0, 120), width=1)
+    return Image.alpha_composite(card.convert("RGBA"), lines).convert("RGB")
+
+
+def card_bytes(img, seed=0, edges="round"):
+    """Vorschaubild für Messenger: 1200 × 630 als Puzzle, höchstens CARD_MAX_BYTES."""
+    return card_jpeg(puzzle_card(cover(img, CARD_SIZE), seed, edges))
+
+
+def decode_card(value):
+    """Startbild vom Editor (data:image/…, 1200 × 630) als Vorschaubild, neu gespeichert. None, wenn es keines ist."""
+    if not isinstance(value, str) or not value.startswith("data:image/") or ";base64," not in value[:40]:
+        return None
+    try:
+        data = base64.b64decode(value.split(",", 1)[1], validate=True)
+        with DECODE_SLOTS, open_photo(data, 4 * CARD_SIZE[0] * CARD_SIZE[1]) as img:
+            card = img.convert("RGB")
+    except Exception:
+        return None
+    return card_jpeg(card if card.size == CARD_SIZE else cover(card, CARD_SIZE))
+
+
+def card_jpeg(card):
     for quality in (82, 72, 62, 52, 42):
         out = io.BytesIO()
         card.save(out, "JPEG", quality=quality, optimize=True)
@@ -603,13 +867,19 @@ def puzzle_name(p):
     return p.get("name") or (p.get("config") or {}).get("title") or "Puzzle"
 
 
+def download_name(title):
+    """Dateiname zum Herunterladen: nur ASCII, sonst «Puzzle»."""
+    return " ".join(re.sub(r"[^A-Za-z0-9 _-]+", " ", unicodedata.normalize("NFKD", title or "")
+                           .encode("ascii", "ignore").decode()).split()) or "Puzzle"
+
+
 def share_title(p):
     return clean_title((p.get("online_link") or {}).get("title")) or puzzle_name(p)
 
 
 class App:
     def __init__(self, immich_url, api_key, data_dir, puzzle_dir="", music_dir="/music", share_port=0,
-                 share_public_url="", shares_api_key="", umami_url="", umami_id="", umami_links_id=""):
+                 share_public_url="", shares_api_key="", umami_url="", umami_id="", umami_links_id="", notifier=None):
         self.data_dir = data_dir
         self.puzzle_dir = puzzle_dir or os.path.join(data_dir, "puzzles")  # Ein Ordner je Puzzle
         self.music_dir = music_dir  # Gemeinsame Musik mit Reels, nur lesen
@@ -629,19 +899,83 @@ class App:
             self.settings = {}
         self._apply_share_url()
         self.views_seen = {}
+        self.notifier = notifier or Notifier()  # ntfy (0.1.18), ohne NTFY_URL/NTFY_TOPIC aus
+        self.run_marker = RunMarker(os.path.join(data_dir, "run.json"), VERSION)  # Absturz erkennen
         umami_url, umami_id, umami_links_id = (umami_url or "").strip().rstrip("/"), (umami_id or "").strip(), (umami_links_id or "").strip()
-        self.umami_tag = (f'<script defer src="{html.escape(umami_url)}/script.js" '
-                          f'data-website-id="{html.escape(umami_id)}"></script>') if umami_url and umami_id else ""
+        # Editor: ein Aufruf pro Laden mit Adresse «/puzzle-editor» (ohne Puzzle-ID und Panel); automatische Zählung aus, sonst zählte
+        # jeder Panel-Wechsel (#P3 …) und jedes history.replaceState als eigener Aufruf. Skriptname hp.js gegen Werbeblocker.
+        self.umami_tag = (f'<script defer src="{html.escape(umami_url)}/hp.js" data-website-id="{html.escape(umami_id)}" '
+                          f'data-auto-track="false" id="umamiApp"></script>'
+                          f'<script>document.getElementById("umamiApp").addEventListener("load", function () {{ '
+                          f'umami.track(function (p) {{ p.url = "/puzzle-editor"; return p; }}); }});</script>') if umami_url and umami_id else ""
         self.umami_links = (umami_url, umami_links_id) if umami_url and umami_links_id else None
+        parts = urllib.parse.urlsplit(umami_url)
+        self.umami_origin = f"{parts.scheme}://{parts.netloc}" if parts.scheme in ("http", "https") and parts.netloc else ""
         self.immich = Immich(immich_url, api_key) if immich_url and api_key else None  # ohne Immich nur Hochladen
         self.lock = threading.Lock()
         self.write_lock = threading.Lock()
         self.puzzles = {}
         self.durations = {}  # (Pfad, mtime) → Sekunden
         self._load()
+        # Video-Download (0.1.17): Aufträge für den Render-Container (render/), Austausch nur über data/render
+        self.videos = render.Videos(data_dir, music_dir, self.upload_music_dir)
+        self.eager_photos = True  # Foto mit Schrift gleich beim Teilen erstellen (_photo_soon)
+        self.videos.prune(list(self.puzzles))
         self.pw_path = os.path.join(data_dir, "share_passwords.json")
         self.pw_fails, self.pw_blocked = {}, {}
         self._prune_passwords()
+        self.log_path = os.path.join(data_dir, "protocol.jsonl")
+        self.log_lock = threading.Lock()
+        self.log = []
+        try:
+            with open(self.log_path, encoding="utf-8") as f:
+                for line in f.readlines()[-PROTOCOL_KEEP:]:
+                    try:
+                        self.log.append(json.loads(line))
+                    except ValueError:
+                        pass
+        except OSError:
+            pass
+
+    # ---------- Protokoll ----------
+    def protocol(self, what, item="", merge=False, pid=None, **values):
+        """Eintrag ins Protokoll. merge: gleicher Code, gleiches Puzzle, gleicher Wer innert PROTOCOL_MERGE ersetzt
+        den letzten Eintrag (automatisches Speichern im Editor; pid statt Name, der Name kann sich ändern). Fehler beim Schreiben halten nichts auf."""
+        role, who = actor()
+        now = datetime.now().astimezone()
+        e = {"when": now.isoformat(timespec="seconds"), "role": role, "who": who, "what": what}
+        if item:
+            e["item"] = str(item)[:120]
+        if pid:
+            e["id"] = pid
+        if values:
+            e["vars"] = values
+        try:
+            with self.log_lock:
+                last = self.log[-1] if self.log else None
+                same = merge and last and all(last.get(k) == e.get(k) for k in ("what", "id", "role", "who"))
+                if same and (now - datetime.fromisoformat(last["when"])).total_seconds() < PROTOCOL_MERGE:
+                    self.log[-1] = e
+                    rewrite = True
+                else:
+                    self.log.append(e)
+                    rewrite = len(self.log) > PROTOCOL_KEEP + 200
+                    if rewrite:
+                        self.log = self.log[-PROTOCOL_KEEP:]
+                if rewrite:
+                    tmp = self.log_path + ".tmp"
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        f.writelines(json.dumps(x, ensure_ascii=False) + "\n" for x in self.log)
+                    os.replace(tmp, self.log_path)
+                else:
+                    with open(self.log_path, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
+        except (OSError, ValueError) as ex:
+            print(f"Protokoll: {ex}", flush=True)
+
+    def protocol_entries(self):
+        with self.log_lock:
+            return {"entries": list(reversed(self.log)), "keep": PROTOCOL_KEEP}
 
     # ---------- Ablage ----------
     def _folder(self, pid):
@@ -675,7 +1009,22 @@ class App:
             self.puzzles[pid] = p
         with self.write_lock:
             write_json(os.path.join(self._folder(pid), "puzzle.json"), p)
+        self.video_state(pid)
+        self._photo_soon(pid, p)
         return p
+
+    def _photo_soon(self, pid, p):
+        """Foto mit Schrift gleich nach dem Teilen bzw. Einschalten von Download erstellen (im Hintergrund),
+        nicht erst beim ersten Herunterladen. Unverändert = nichts zu tun (Datei mit gleichem Hash liegt schon da)."""
+        link = p.get("online_link") or {}
+        if not (link.get("download") and link_active(link)) or not getattr(self, "eager_photos", False):
+            return
+        def run():
+            try:
+                self.download_photo(pid, self.shared_view(pid))
+            except Exception as e:  # noqa: BLE001 – beim Herunterladen wird es nochmals versucht
+                print(f"Foto mit Schrift für {pid}: {e}", flush=True)
+        threading.Thread(target=run, daemon=True).start()
 
     def file(self, pid, name):
         if name not in ("photo.jpg", "thumb.jpg", "card.jpg"):
@@ -684,13 +1033,29 @@ class App:
         path = os.path.join(self._folder(pid), name)
         if not os.path.isfile(path):
             raise KeyError(name)
+        if name == "card.jpg" and os.path.getmtime(path) < CARD_PUZZLE_SINCE:
+            self._renew_card(pid, path)
         return path
+
+    def _renew_card(self, pid, path):
+        """Vorschaubild von vor 0.1.8 (nur Foto) als Puzzle neu erstellen."""
+        edges = (self._puzzle(pid).get("config") or {}).get("edges", "round")
+        try:
+            with Image.open(os.path.join(self._folder(pid), "photo.jpg")) as img:
+                data = card_bytes(img.convert("RGB"), pid, edges)
+        except OSError:
+            return
+        with self.write_lock:
+            tmp = f"{path}.{uuid.uuid4().hex}.tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, path)
 
     def _entry(self, p, now=None):
         now = time.time() if now is None else now
         cfg = p.get("config") or {}
         return {"id": p["id"], "name": puzzle_name(p), "created": p.get("created"), "updated": p.get("updated"),
-                "by": p.get("by") or "", "count": cfg.get("count"), "T": cfg.get("T"), "format": cfg.get("format"),
+                "by": p.get("by") or "", "forWhom": p.get("for") or "", "count": cfg.get("count"), "T": cfg.get("T"), "format": cfg.get("format"),
                 "thumb": f"/api/puzzles/{p['id']}/thumb.jpg?v={int(p.get('updated') or 0)}",
                 "link": self._share_entry(p, now) if (p.get("online_link") or {}).get("token") else None}
 
@@ -699,11 +1064,12 @@ class App:
             items = [json.loads(json.dumps(p)) for p in self.puzzles.values()]
         now = time.time()
         items.sort(key=lambda p: p.get("updated") or 0, reverse=True)
-        return {"puzzles": [self._entry(p, now) for p in items], **self.share_setup()}
+        return {"puzzles": [self._entry(p, now) for p in items], **self.share_setup(), **self.app_settings()}
 
     def get_puzzle(self, pid):
         p = self._puzzle(pid)
         return {**self._entry(p), "config": p.get("config"), "asset": p.get("asset"), "meta": p.get("meta"),
+                "note": p.get("note") or "", "steps": p.get("steps"),
                 "photo": f"/api/puzzles/{pid}/photo.jpg?v={int(p.get('updated') or 0)}"}
 
     def need_immich(self):
@@ -744,20 +1110,30 @@ class App:
             old = self._puzzle(pid)
         folder = self._folder(pid)
         os.makedirs(folder, exist_ok=True)
-        changes = {"config": config, "updated": now, "name": clean_title(body.get("name")) or config["title"]}
+        changes = {"config": config, "updated": now, "name": clean_title(body.get("name")) or config["title"],
+                   **clean_details(body)}
+        card = decode_card(body.get("card"))  # Startbild aus dem Editor (0.1.8), sonst macht der Server eines
+        files = []
         if photo:
             data, img = decode_photo(photo)
+            files = [("photo.jpg", data), ("thumb.jpg", thumb_bytes(img)), ("card.jpg", card or card_bytes(img, pid, config["edges"]))]
+        elif card:
+            files = [("card.jpg", card)]
+        if files:
             with self.write_lock:
-                for name, content in (("photo.jpg", data), ("thumb.jpg", thumb_bytes(img)), ("card.jpg", card_bytes(img))):
+                for name, content in files:
                     tmp = os.path.join(folder, f"{name}.{uuid.uuid4().hex}.tmp")
                     with open(tmp, "wb") as f:
                         f.write(content)
                     os.replace(tmp, os.path.join(folder, name))
+        if photo:
             changes["asset"] = asset
             changes["meta"] = self._meta_of(asset) if asset else None
         with self.lock:
+            new = pid not in self.puzzles
             self.puzzles[pid] = {**old, **self.puzzles.get(pid, {})}
         self._update(pid, **changes)
+        self.protocol("puzzleNew" if new else "puzzleEdit", changes["name"], merge=not new, pid=pid)
         return self.get_puzzle(pid)
 
     def delete_puzzle(self, pid):
@@ -765,9 +1141,11 @@ class App:
         with self.lock:
             if pid not in self.puzzles:
                 raise KeyError(pid)
-            del self.puzzles[pid]
+            name = puzzle_name(self.puzzles.pop(pid))
         shutil.rmtree(folder, ignore_errors=True)
+        self.videos.remove(pid)
         self._prune_passwords()
+        self.protocol("puzzleDelete", name)
         return {"ok": True}
 
     # ---------- Musik: gemeinsamer Ordner (Reels) und eigene Uploads ----------
@@ -851,12 +1229,14 @@ class App:
             with open(os.path.join(self.upload_music_dir, file), "wb") as f:
                 f.write(data)
         path = os.path.join(self.upload_music_dir, file)
+        self.protocol("musicAdd", track_name(file))
         return {"id": "up:" + file, "name": track_name(file), "group": "", "duration": self._duration(path), "own": True}
 
     def delete_music(self, mid):
         if not str(mid).startswith("up:"):
             raise ValueError(Msg("musicReadOnly", "Musik aus dem gemeinsamen Ordner lässt sich hier nicht löschen."))
         os.remove(self.music_path(mid))
+        self.protocol("musicDelete", track_name(str(mid)[3:]))
         return {"ok": True}
 
     # ---------- Live-Links (Muster aus Collage, Entscheide 38, 39, 48, 49, 50) ----------
@@ -868,6 +1248,9 @@ class App:
         link = dict(old or {"token": secrets.token_urlsafe(24), "created": time.time(), "expires": None, "days": 0})
         if "download" in body or "token" not in old:
             link["download"] = bool(body.get("download"))
+        for key in ("video", "share"):  # Video getrennt vom Foto (0.1.17); Kiosk-Gäste haben nur Video
+            if key in body:
+                link[key] = bool(body.get(key))
         if "metadata" in body:
             if not isinstance(body["metadata"], bool):
                 raise ValueError(Msg("notBool", "«{field}» muss true oder false sein.", field="metadata"))
@@ -882,13 +1265,15 @@ class App:
             if not isinstance(body["active"], bool):
                 raise ValueError(Msg("badActive", "«Aktiv» muss ein- oder ausgeschaltet sein."))
             set_active(link, body["active"])
+        if "from" in body or not link.get("valid_from"):
+            link["valid_from"] = link_start(body.get("from")) if "from" in body else link_from(link) or link_start(None)
         if "days" in body or "until" in body:
-            link["expires"], link["days"] = link_expiry(body)
+            link["expires"], link["days"] = link_expiry(body, start=link["valid_from"])
+        elif "from" in body and link.get("days") not in (None, 0, "until"):  # neues «ab»: Dauer zählt ab dort
+            link["expires"], link["days"] = link_expiry({"days": link["days"]}, start=link["valid_from"])
         password = ...
         if "password" in body:
             password = check_password(body["password"])
-        if "from" in body:
-            link["valid_from"] = link_start(body.get("from"))
         if link.get("valid_from") and link.get("expires") and link["expires"] < link["valid_from"]:
             raise ValueError(Msg("endBeforeStart", "Der Link würde ablaufen, bevor er gilt."))
         if password is not ...:
@@ -898,12 +1283,18 @@ class App:
             else:
                 link["protected"] = True
         self._update(pid, online_link=link)
+        if "token" not in old:
+            self.protocol("linkNew", puzzle_name(p))
+        elif changes := link_changes(old, link, password):
+            self.protocol("linkEdit", puzzle_name(p), changes=changes)
         return self.get_puzzle(pid)
 
     def revoke_online_link(self, pid):
-        self._puzzle(pid)
+        p = self._puzzle(pid)
         self._update(pid, online_link=None)
         self._prune_passwords()
+        if (p.get("online_link") or {}).get("token"):
+            self.protocol("linkDelete", puzzle_name(p))
         return self.get_puzzle(pid)
 
     def _passwords(self):
@@ -1000,8 +1391,10 @@ class App:
 
     def revoke_share(self, token, by="Smart Albums"):
         pid = self._by_token(token)
+        name = puzzle_name(self._puzzle(pid))
         self._update(pid, online_link=None)
         self._prune_passwords()
+        self.protocol("linkDelete", name)
         print(f"Live-Link von {pid} widerrufen durch {by}", flush=True)
 
     def shared_puzzle(self, token):
@@ -1018,7 +1411,7 @@ class App:
             raise NotYetValid(start)
         return pid
 
-    def shared_view(self, pid):
+    def shared_view(self, pid, visitor=None):
         """Was die Empfängerseite bekommt: Einstellungen ohne Musik-Pfad, Metadaten nur mit Schalter."""
         p = self._puzzle(pid)
         link = p.get("online_link") or {}
@@ -1026,16 +1419,89 @@ class App:
         music = cfg.pop("music", None)
         out = {"title": share_title(p), "by": p.get("by") or "", "config": cfg,
                "music": {"volume": music.get("volume", .8), "fade": music.get("fade", True)} if music else None,
-               "download": bool(link.get("download")), "meta": None}
+               "download": bool(link.get("download")), "meta": None,
+               "year": datetime.fromtimestamp(p.get("created") or time.time()).year,
+               "madeWith": self.settings.get("made_with_url") or "",
+               "madeWithText": self.settings.get("made_with_text") or "",
+               "copyright": self.copyright(),
+               "likes": len(link.get("likers") or []),
+               "liked": bool(visitor and self._liker(link, visitor) in (link.get("likers") or []))}
         if link_metadata(link):
             out["meta"] = p.get("meta")
         return out
+
+    def video_state(self, pid, view=None):
+        """Video zum Puzzle: None (kein Knopf), "pending" (wird erstellt …) oder "ready". Schreibt oder löscht dabei den
+        Auftrag für den Render-Container. Titel, Unterzeile und Fusszeile wie auf der Empfängerseite (auch Kiosk)."""
+        try:
+            return self.videos.state(pid, self._puzzle(pid), self._folder(pid), self._render_info(pid, view))
+        except (KeyError, OSError, ValueError):
+            return None  # Video ist ein Zusatz: nie das Speichern oder die Empfängerseite stören
+
+    def _render_info(self, pid, view=None):
+        view = view or self.shared_view(pid)
+        return {"title": view["title"], "meta": view.get("meta"), "kiosk": bool(view.get("kiosk")),
+                "made_with_text": view.get("madeWithText") or (view.get("madeWith") or "").replace("https://", "").replace("http://", ""),
+                "copyright": view.get("copyright") or "", "year": view.get("year"), "lang": "de"}
+
+    def download_photo(self, pid, view):
+        """Foto-Download (0.1.17): mit Titel oben und Fusszeile unten wie im Video. Fällt nur bei einem Fehler auf das
+        Foto ohne Schrift zurück, damit der Download nie ganz ausfällt."""
+        try:
+            path = self.videos.photo(pid, self._puzzle(pid), self._folder(pid), self._render_info(pid, view))
+            if path:
+                return path
+        except Exception as e:  # noqa: BLE001 – Schrift ist ein Zusatz
+            print(f"Foto mit Schrift für {pid}: {e}", flush=True)
+        return self.file(pid, "photo.jpg")
+
+    def video_settings(self):
+        return self.videos.overview()
+
+    def set_video(self, on):
+        """Hauptschalter Video-Download (Admin): aus = keine neuen Aufträge, Knopf weg, fertige Videos gelöscht."""
+        self.videos.set_enabled(bool(on))
+        with self.lock:
+            ids = [pid for pid, p in self.puzzles.items() if (p.get("online_link") or {}).get("token")]
+        for pid in ids:
+            self.video_state(pid)
+        self.protocol("videoOn" if on else "videoOff", "")
+        return self.video_settings()
 
     def shared_music(self, pid):
         music = (self._puzzle(pid).get("config") or {}).get("music")
         if not music:
             raise KeyError("music")
         return self.music_path(music["id"])
+
+    @staticmethod
+    def _liker(link, visitor):
+        """Gespeichert wird nur ein Hash aus Link und Besucher-Kennung, keine IP (Like, 0.1.8)."""
+        return hashlib.sha256(f"{link.get('token')}:{visitor}".encode()).hexdigest()[:16]
+
+    def set_like(self, pid, visitor, on):
+        """Ein Like pro Besucher (Roger 22.11.2026), wieder zurücknehmbar. Gibt Zahl und eigenen Stand zurück."""
+        if not isinstance(visitor, str) or not VISITOR_ID.match(visitor):
+            raise ValueError("visitor")  # Freigabe-Port: 404
+        on = bool(on)
+        with self.lock:
+            link = (self.puzzles.get(pid) or {}).get("online_link")
+            if not link or not link.get("token"):
+                raise KeyError(pid)
+            likers = list(link.get("likers") or [])
+            key = self._liker(link, visitor)
+            changed = (key in likers) != on
+            if changed:
+                if on:
+                    likers = (likers + [key])[-LIKES_MAX:]
+                else:
+                    likers.remove(key)
+                link = {**link, "likers": likers}
+                if on:  # gesetzte Likes pro Tag für die Tageszusammenfassung (0.1.18), nur Tag und Zahl
+                    link["like_days"] = count_day(link.get("like_days"), time.time())
+        if changed:  # nur in den Angaben des Links, nicht im Protokoll und nicht in der Shares-API (Roger 22.11.2026)
+            self._update(pid, online_link=link)
+        return {"likes": len(likers), "liked": on}
 
     def count_view(self, pid, ip, agent, now=None):
         now = time.time() if now is None else now
@@ -1054,7 +1520,9 @@ class App:
             seen[key] = now
             link = {**link, "views": int(link.get("views") or 0) + 1, "last_viewed_at": now,
                     "view_days": count_day(link.get("view_days"), now)}
+            name = puzzle_name(self.puzzles[pid])
         self._update(pid, online_link=link)
+        self.protocol("linkView", name)
         return True
 
     def share_path(self, token):
@@ -1067,12 +1535,14 @@ class App:
         return {"id": p["id"], "title": share_title(p), "name": puzzle_name(p),
                 "own_title": clean_title(link.get("title")), "created_at": link.get("created"), "expires_at": expires,
                 "expired": bool(expires and now > expires), "days": link.get("days"),
-                "valid_from": link.get("valid_from"), "pending": bool(link.get("valid_from") and now < link["valid_from"]),
+                "valid_from": link_from(link), "pending": bool(link.get("valid_from") and now < link["valid_from"]),
                 "views": int(link.get("views") or 0), "last_viewed_at": link.get("last_viewed_at"),
+                "likes": len(link.get("likers") or []),
+                "view_days": self.view_days(link, now),  # Zugriffs-Statistik in der App (0.1.8)
                 "url": self.share_origin + path if self.share_origin else "", "path": path,
                 "thumb": f"/api/puzzles/{p['id']}/thumb.jpg?v={int(p.get('updated') or 0)}",
-                "download": bool(link.get("download")), "active": link_active(link),
-                "metadata": link_metadata(link), "protected": bool(link.get("protected"))}
+                "download": bool(link.get("download")), "active": link_active(link), "video": bool(link.get("video")),
+                "share": bool(link.get("share")), "metadata": link_metadata(link), "protected": bool(link.get("protected"))}
 
     def _apply_share_url(self):
         own = str(self.settings.get("share_public_url") or "").strip()
@@ -1101,7 +1571,172 @@ class App:
             write_json(self.settings_path, settings)
             self.settings = settings
             self._apply_share_url()
+        self.protocol("shareUrl", url=url)
         return self.share_setup()
+
+    def app_settings(self):
+        """Standard für neue Puzzles (None = Werkseinstellung) und «Erstellt mit»-Adresse der Empfängerseite."""
+        return {"defaults": self.settings.get("defaults"), "madeWith": self.settings.get("made_with_url") or "",
+                "madeWithText": self.settings.get("made_with_text") or "", "copyright": self.copyright(),
+                "video": self.videos.overview(), "notify": self.alert_view()}
+
+    def copyright(self):
+        """Zweite Zeile der Fusszeile («© Jahr by …»): fest, nur über den Eintrag «copyright» in settings.json, nicht in der App änderbar."""
+        return " ".join(str(self.settings.get("copyright") or "").split())[:120]
+
+    def _set_setting(self, key, value):
+        with self.write_lock:
+            settings = {**self.settings, key: value}
+            if value in (None, ""):
+                settings.pop(key)
+            write_json(self.settings_path, settings)
+            self.settings = settings
+
+    def set_defaults(self, defaults):
+        """Standard für neue Puzzles setzen (Einstellungen oder «Als Standard übernehmen»). None = Werkseinstellung."""
+        value = None if defaults is None else clean_defaults(defaults)
+        self._set_setting("defaults", value)
+        self.protocol("defaultsSet" if value else "defaultsReset")
+        return self.app_settings()
+
+    def set_made_with(self, url, text=None):
+        """Erste Zeile unten auf der Empfängerseite: «Erstellt mit Text»; die Adresse macht den Text zum Link."""
+        url = clean_url(url, "madeWith")
+        text = " ".join(str(text or "").split())[:120]
+        self._set_setting("made_with_url", url)
+        self._set_setting("made_with_text", text)
+        self.protocol("madeWith", url=" · ".join(x for x in (text, url) if x) or "–")
+        return self.app_settings()
+
+    # ---------- Meldungen über ntfy (0.1.18) ----------
+    def alert_settings(self):
+        saved = self.settings.get("notify") if isinstance(self.settings.get("notify"), dict) else {}
+        out = {k: saved.get(k) is not False for k in ALERT_KINDS}
+        out["time"] = saved.get("time") or ALERT_TIME
+        out["sentDay"] = saved.get("sentDay") or ""
+        return out
+
+    def alert_view(self):
+        """Für Einstellungen › Meldungen; der Kiosk überschreibt das mit None (eigene Box)."""
+        return {**self.alert_settings(), "ntfy": self.notifier.view()}
+
+    def set_alert_settings(self, body):
+        cur = self.alert_settings()
+        for k in ALERT_KINDS:
+            if k in body:
+                if not isinstance(body[k], bool):
+                    raise ValueError(Msg("notBool", "«{field}» muss true oder false sein.", field=k))
+                cur[k] = body[k]
+        if "time" in body:
+            cur["time"] = clean_time(body["time"])
+        self._set_setting("notify", cur)
+        self.protocol("notifySet")
+        return self.alert_view()
+
+    def alert(self, kind, title, message, prio=3, tags=()):
+        """Meldung einer Art (errors, summary), wenn ihr Schalter an ist; nie blockierend."""
+        if not self.alert_settings().get(kind) or not self.notifier.ready():
+            return False
+        self.notifier.send(title, message, prio, tags)
+        return True
+
+    def _alert_sent(self, title, message, tags):
+        if not self.notifier.ready():
+            raise ValueError(Msg("ntfyOff", "ntfy ist nicht eingerichtet: im Stack NTFY_URL und NTFY_TOPIC setzen."))
+        res = self.notifier.send(title, message, 2, tags, wait=True)
+        if not res.get("ok"):
+            raise ValueError(Msg("ntfyFail", "{error}", error=res.get("error") or "?"))
+        return {**self.alert_view(), "sent": res}
+
+    def alert_test(self):
+        return self._alert_sent("Puzzle: Testmeldung", "Die Meldungen von Puzzle kommen an.", ["white_check_mark"])
+
+    def day_numbers(self, day):
+        """Zahlen eines Tages (YYYY-MM-DD, Lokalzeit) aus den Puzzles: neu, neue Links, Aufrufe, gesetzte Likes, meistgeschaut.
+        Gelöschte Puzzles zählen nicht mehr mit; Likes pro Tag gibt es erst ab 0.1.18."""
+        start = datetime.strptime(day, "%Y-%m-%d").timestamp()
+        end = start + 86400
+        with self.lock:
+            items = [json.loads(json.dumps(p)) for p in self.puzzles.values()]
+        out = {"created": 0, "links": 0, "views": 0, "likes": 0, "top": None}
+        best = 0
+        for p in items:
+            if start <= float(p.get("created") or 0) < end:
+                out["created"] += 1
+            link = p.get("online_link") or {}
+            if not link.get("token"):
+                continue
+            if start <= float(link.get("created") or 0) < end:
+                out["links"] += 1
+            views = int((link.get("view_days") or {}).get(day) or 0)
+            out["views"] += views
+            out["likes"] += int((link.get("like_days") or {}).get(day) or 0)
+            if views > best:
+                best, out["top"] = views, (share_title(p), views)
+        return out
+
+    def alert_summary_text(self, day, today=False):
+        d = datetime.strptime(day, "%Y-%m-%d")
+
+        def line(n):
+            text = f"{n['created']} neue Puzzles, {n['links']} neue Links, {n['views']} Aufrufe, {n['likes']} Likes"
+            if n["top"]:
+                text += f"; meistgeschaut: «{n['top'][0]}» ({n['top'][1]})"
+            return text
+        lines = [f"{WEEKDAYS[d.weekday()]} {d:%d.%m.%Y}: " + line(self.day_numbers(day))]
+        if today:
+            lines.append("Heute bis jetzt: " + line(self.day_numbers(time.strftime("%Y-%m-%d"))))
+        now = time.time()
+        with self.lock:
+            items = list(self.puzzles.values())
+        links = [p["online_link"] for p in items if (p.get("online_link") or {}).get("token")]
+        live = [lk for lk in links if link_active(lk) and not (lk.get("expires") and now > lk["expires"])]
+        views = sum(int(lk.get("views") or 0) for lk in links)
+        likes = sum(len(lk.get("likers") or []) for lk in links)
+        lines.append(f"Stand: {len(items)} Puzzles, {len(live)} aktive Links, insgesamt {views} Aufrufe und {likes} Likes")
+        return "\n".join(lines)
+
+    def alert_summary(self, now=None, manual=False):
+        """Tageszusammenfassung für den Vortag. manual (Knopf «Jetzt senden»): sofort, mit heute bis jetzt, wartet auf ntfy."""
+        now = time.time() if now is None else now
+        day = (datetime.fromtimestamp(now) - timedelta(days=1)).strftime("%Y-%m-%d")
+        text = self.alert_summary_text(day, today=manual)
+        if manual:
+            return self._alert_sent("Puzzle: Zusammenfassung", text, ["bar_chart"])
+        return self.notifier.send("Puzzle: Tageszusammenfassung", text, 2, ["bar_chart"])
+
+    def alert_due(self, now=None):
+        """Einmal pro Tag ab der eingestellten Uhrzeit (auch nachgeholt, wenn Puzzle um diese Zeit nicht lief)."""
+        now = time.time() if now is None else now
+        cfg = self.alert_settings()
+        local = datetime.fromtimestamp(now)
+        today = local.strftime("%Y-%m-%d")
+        if not cfg["summary"] or not self.notifier.ready() or cfg["sentDay"] == today or local.strftime("%H:%M") < cfg["time"]:
+            return False
+        saved = self.settings.get("notify") if isinstance(self.settings.get("notify"), dict) else {}
+        self._set_setting("notify", {**saved, "sentDay": today})
+        self.alert_summary(now)
+        return True
+
+    def run_start(self):
+        """Beim Start: endete der letzte Lauf nicht sauber, Meldung «Neustart nach Absturz»."""
+        old = self.run_marker.start()
+        if old:
+            self.alert("errors", "Puzzle: Neustart nach Absturz",
+                       f"Puzzle lief seit {old.get('started', '?')} (Version {old.get('version', '?')}) und endete nicht "
+                       f"sauber; zuletzt aktiv {old.get('alive', '?')}. Jetzt läuft {VERSION}.", 4, ["rotating_light"])
+        return old
+
+    def start_alerts(self):
+        def beat():
+            while True:
+                try:
+                    self.run_marker.alive()
+                    self.alert_due()
+                except Exception:  # noqa: BLE001
+                    traceback.print_exc()
+                time.sleep(HEARTBEAT)
+        threading.Thread(target=beat, daemon=True).start()
 
     def list_shares(self):
         now = time.time()
@@ -1119,23 +1754,29 @@ class App:
                    if (p.get("online_link") or {}).get("expires") and now > p["online_link"]["expires"]]
         for pid in ids:
             self._update(pid, online_link=None)
+            self.protocol("linkDelete", puzzle_name(self._puzzle(pid)))
         if ids:
             self._prune_passwords()
         return self.list_shares()
 
     def share_umami_tag(self, grund=None):
-        """Umami für Freigabe- und Hinweisseiten (UMAMI_LINKS_ID, Tag der Marke): URL nur mit Präfix, leerer Referrer.
+        """Umami für Freigabe- und Hinweisseiten (UMAMI_LINKS_ID, Tag der Marke): Adresse fest «/puzzle-shared-link» (ohne Code), leerer Referrer.
         Hinweisseiten (Entscheid 52) melden dazu das Ereignis «Hinweis» mit dem Grund."""
         if not self.umami_links:
             return ""
         url, site = self.umami_links
-        masked = html.escape(json.dumps(self.share_prefix.rstrip("/") + "/"))
+
+        def js(value):  # JSON im <script>: kein </script> möglich
+            return json.dumps(value).replace("<", "\\u003c")
+        masked = js("/puzzle-shared-link")  # fester Name statt Präfix, in Umami lesbar
         # Auch das Ereignis mit maskierter URL, sonst ginge der Code mit
         event = (f" umami.track(function (p) {{ p.url = {masked}; p.referrer = ''; p.name = 'Hinweis'; "
-                 f"p.data = {{ grund: {html.escape(json.dumps(grund))} }}; return p; }});") if grund else ""
-        return (f'<script defer src="{html.escape(url)}/script.js" data-website-id="{html.escape(site)}" '
-                f'data-tag="{html.escape(FAMILY_ID)}" data-auto-track="false" '
-                f'onload="umami.track(function (p) {{ p.url = {masked}; p.referrer = \'\'; return p; }});{event}"></script>')
+                 f"p.data = {{ grund: {js(grund)} }}; return p; }});") if grund else ""
+        # Kein onload-Attribut (strenge CSP mit Nonce): eigenes Skript wartet auf das Laden von Umami
+        return (f'<script defer src="{html.escape(url)}/hp.js" data-website-id="{html.escape(site)}" '
+                f'data-tag="{html.escape(FAMILY_ID)}" data-auto-track="false" id="umamiJs"></script>'
+                f'<script>document.getElementById("umamiJs").addEventListener("load", function () {{ '
+                f"umami.track(function (p) {{ p.url = {masked}; p.referrer = ''; return p; }});{event} }});</script>")
 
     def hint_csp(self):
         """CSP der Hinweisseite (wie Collage): nur eigene Logos, Stil und Skript inline, Umami nur mit UMAMI_LINKS_ID."""
@@ -1173,14 +1814,19 @@ class App:
         iso = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if t else None
         link = p["online_link"]
         url = self.share_origin + self.share_path(link["token"]) if self.share_origin else ""
+        now = time.time()
+        # Vorschaubild nur, wenn der Link abrufbar ist (wie Mosaik): sonst sperrt die Seite card.jpg und Smart Albums lädt vergeblich (0.1.8)
+        live = (not link.get("protected") and link_active(link) and not (link.get("expires") and now > link["expires"])
+                and not (link.get("valid_from") and now < link["valid_from"]))
         return {"id": link["token"], "title": share_title(p), "url": url, "item": puzzle_name(p),
                 "person": None, "created": iso(link.get("created")),
-                "validFrom": iso(link.get("valid_from")), "expires": iso(link.get("expires")),
+                "validFrom": iso(link_from(link)), "expires": iso(link.get("expires")),
                 "protected": bool(link.get("protected")), "views": int(link.get("views") or 0), "viewDays": self.view_days(link),
-                "preview": url + "card.jpg" if url else None,
+                "preview": url + "card.jpg" if url and live else None,
                 "open": f"{app_url}/?id={urllib.parse.quote(p['id'])}", "revocable": True,
                 "actions": list(SHARE_ACTIONS), "active": link_active(link), "download": bool(link.get("download")),
-                "metadata": link_metadata(link)}
+                "video": bool(link.get("video")), "share": bool(link.get("share")), "metadata": link_metadata(link),
+                "offSince": None if link_active(link) else iso(link.get("off_since"))}
 
     def patch_share(self, token, body, app_url, by="Smart Albums"):
         if not isinstance(body, dict) or not body:
@@ -1188,7 +1834,7 @@ class App:
         for field in body:
             if PATCH_FIELDS.get(field) not in SHARE_ACTIONS:
                 raise FieldError(field, Msg("fieldNotChangeable", "«{field}» lässt sich hier nicht ändern.", field=field))
-        for field in ("download", "metadata", "active"):
+        for field in (*LINK_FLAGS, "metadata", "active"):
             if field in body and not isinstance(body[field], bool):
                 raise FieldError(field, Msg("notBool", "«{field}» muss true oder false sein.", field=field))
         expires = parse_utc(body["expires"], "expires") if "expires" in body else None
@@ -1199,13 +1845,14 @@ class App:
         if "expires" in body:
             link["expires"], link["days"] = (expires, "until") if expires else (None, 0)
         if "validFrom" in body:
-            link["valid_from"] = start
+            link["valid_from"] = start or link_start(None)  # leer = ab heute, nie ohne Datum
         new_start, new_end = link.get("valid_from"), link.get("expires")
         if new_start and new_end and new_end < new_start:
             raise FieldError("expires" if "expires" in body else "validFrom",
                              Msg("endBeforeStart", "Der Link würde ablaufen, bevor er gilt."))
-        if "download" in body:
-            link["download"] = body["download"]
+        for field in LINK_FLAGS:
+            if field in body:
+                link[field] = body[field]
         if "metadata" in body:
             set_metadata(link, body["metadata"])
         if "active" in body:
@@ -1216,7 +1863,11 @@ class App:
                 link.pop("protected", None)
             else:
                 link["protected"] = True
+        old = self._puzzle(pid)
         self._update(pid, online_link=link)
+        changes = link_changes(old["online_link"], link, password if "password" in body else ...)
+        if changes:
+            self.protocol("linkEdit", puzzle_name(old), changes=changes)
         print(f"Live-Link von {pid} geändert durch {by}: {', '.join(sorted(body))}", flush=True)
         return self._internal_entry(self._puzzle(pid), app_url)
 
@@ -1316,12 +1967,22 @@ def make_handler(app, auth=None, register=None):
                     self.wfile.write(chunk)
                     left -= len(chunk)
 
-        def _read(self, limit=1024 * 1024):
-            length = int(self.headers.get("Content-Length") or 0)
+        def _length(self, limit=1024 * 1024):
+            """Content-Length prüfen, bevor etwas gelesen wird: fehlt = 0, negativ oder unlesbar = Fehler."""
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0:
+                self.close_connection = True
+                raise ValueError(Msg("badLength", "Ungültige Anfrage."))
             if length > limit:
                 self.close_connection = True
-                raise ValueError(Msg("fileTooBig", "Die Datei ist zu gross."))
-            return self.rfile.read(length)
+                raise TooLarge(Msg("fileTooBig", "Die Datei ist zu gross."))
+            return length
+
+        def _read(self, limit=1024 * 1024):
+            return self.rfile.read(self._length(limit))
 
         def _body(self, limit=1024 * 1024):
             if not (self.headers.get("Content-Type") or "").startswith("application/json"):
@@ -1338,6 +1999,7 @@ def make_handler(app, auth=None, register=None):
         def _route(self, handler):
             try:
                 parts = self.path.split("?")[0].strip("/").split("/")
+                set_actor("smart", "Smart Albums") if parts[:2] == ["api", "internal"] else set_actor("admin", self._by())
                 if parts == ["api", "internal", "shares"] and self.command in ("GET", "HEAD"):
                     self._internal_shares()
                     return
@@ -1353,6 +2015,8 @@ def make_handler(app, auth=None, register=None):
                 handler(parts)
             except FieldError as e:
                 self._json({**fields("error", of(e)), "field": e.field}, 400)
+            except TooLarge as e:
+                self._json(fields("error", of(e)), 413)
             except ValueError as e:
                 self._json(fields("error", of(e)), 400)
             except (KeyError, FileNotFoundError):
@@ -1456,6 +2120,8 @@ def make_handler(app, auth=None, register=None):
         def _auth_post(self, action):
             if action == "logout":
                 self._read()
+                if auth and auth.enabled and self._user():
+                    app.protocol("logout")
                 cookies = [self._cookie("", 0)]
                 if auth and auth.enabled and auth.family.enabled:
                     cookies.append(self._family_cookie("", 0))
@@ -1475,12 +2141,16 @@ def make_handler(app, auth=None, register=None):
                 if not auth.check(data.get("username"), data.get("password")):
                     wait = auth.failed(ip)
                     print(f"Login fehlgeschlagen von {ip}" + (", gesperrt" if wait else ""), flush=True)
+                    set_actor("admin", str(data.get("username") or ""))
+                    app.protocol("loginFail" + ("Block" if wait else ""))
                     if wait:
                         self._too_many(wait)
                     else:
                         self._json(fields("error", Msg("loginWrong", "Benutzername oder Passwort stimmt nicht.")), 401)
                     return
                 auth.succeeded(ip)
+                set_actor("admin", auth.name or auth.user)
+                app.protocol("login")
                 max_age = login.REMEMBER_DAYS * 86400 if data.get("remember") else None
                 cookies = [self._cookie(auth.make_cookie(), max_age)]
                 if auth.family.enabled:
@@ -1507,6 +2177,23 @@ def make_handler(app, auth=None, register=None):
         def _no_patch(self, parts):
             raise KeyError(self.path)
 
+        def _mode_tags(self):
+            return ""  # Kiosk-Modus (kiosk.py) hängt hier eigene Dateien an
+
+        def _head_tags(self):
+            return ""  # Kiosk-Modus: früh im <head>, bevor die Seite gezeichnet wird
+
+        def _strict_page(self):
+            return False  # Kiosk-Gäste: strenge CSP mit Nonce für den Editor
+
+        def _secure_page(self, page):
+            """Seite mit Nonce und Headern: CSP, keine Einbettung, HSTS hinter https."""
+            nonce = secrets.token_urlsafe(16)
+            headers = {"Content-Security-Policy": page_csp(nonce, app.umami_origin), "X-Frame-Options": "DENY"}
+            if login.is_https(self.client_address[0], self.headers):
+                headers["Strict-Transport-Security"] = "max-age=31536000"
+            return with_nonce(page, nonce), headers
+
         def _script(self, name):
             self._file(os.path.join(APP_DIR, name), "text/css; charset=utf-8" if name.endswith(".css") else "text/javascript; charset=utf-8")
 
@@ -1529,8 +2216,11 @@ def make_handler(app, auth=None, register=None):
                 self._json(register.view() if register else {"self": None, "services": [], "openMode": family.OPEN_MODE_DEFAULT})
             elif parts == [""]:
                 with open(os.path.join(APP_DIR, "puzzle.html"), encoding="utf-8") as f:
-                    page = f.read().replace("{{UMAMI}}", app.umami_tag).replace("{{VERSION}}", VERSION).replace("{{OG}}", self._app_card())
-                self._send(200, page.replace("{{I18N}}", self._i18n()).encode(), "text/html; charset=utf-8")
+                    page = f.read().replace("{{UMAMI}}", app.umami_tag).replace("{{VERSION}}", VERSION).replace("{{OG}}", self._app_card()).replace("{{MODE}}", self._mode_tags()).replace("</head>", self._head_tags() + "</head>", 1)
+                page, headers = page.replace("{{I18N}}", self._i18n()), None
+                if self._strict_page():
+                    page, headers = self._secure_page(page)
+                self._send(200, page.encode(), "text/html; charset=utf-8", headers)
             elif parts in (["common.css"], ["common.js"], ["profile.js"], ["i18n.js"], ["puzzle-engine.js"]) \
                     or (len(parts) == 1 and parts[0] in text_files()):
                 self._script(parts[0])
@@ -1565,6 +2255,8 @@ def make_handler(app, auth=None, register=None):
                 self._file(app.file(parts[2], parts[3]), "image/jpeg", {"Cache-Control": "private, max-age=86400"})
             elif parts == ["api", "shares"]:
                 self._json(app.list_shares())
+            elif parts == ["api", "protocol"]:
+                self._json(app.protocol_entries())
             else:
                 raise KeyError(self.path)
 
@@ -1591,6 +2283,20 @@ def make_handler(app, auth=None, register=None):
                 self._json(app.online_link(parts[2], self._body()))
             elif parts == ["api", "shares", "url"]:  # Einstellung «Adresse der Live-Links»
                 self._json(app.set_share_url(self._body().get("url")))
+            elif parts == ["api", "settings", "defaults"]:  # Standard für neue Puzzles
+                self._json(app.set_defaults(self._body().get("defaults")))
+            elif parts == ["api", "settings", "video"]:  # Hauptschalter Video-Download (0.1.17)
+                self._json(app.set_video(self._body().get("enabled")))
+            elif parts == ["api", "settings", "notify"]:  # Meldungen über ntfy (0.1.18)
+                self._json(app.set_alert_settings(self._body()))
+            elif parts == ["api", "settings", "notify", "test"]:
+                self._read()
+                self._json(app.alert_test())
+            elif parts == ["api", "settings", "notify", "summary"]:
+                self._read()
+                self._json(app.alert_summary(manual=True))
+            elif parts == ["api", "settings", "made-with"]:  # «Erstellt mit …» auf der Empfängerseite
+                self._json(app.set_made_with(**{k: v for k, v in self._body().items() if k in ("url", "text")}))
             else:
                 self._read()
                 raise KeyError(self.path)
@@ -1677,6 +2383,7 @@ def make_share_handler(app):
         def _route(self, handler):
             """Fehler des Freigabe-Ports: Seiten bekommen die Hinweisseite, JSON, Bilder und Musik denselben Status."""
             html_wanted = self.command in ("GET", "HEAD", "POST") and "text/html" in (self.headers.get("Accept") or "")
+            set_actor("visitor")
             try:
                 handler(self.path.split("?")[0].strip("/").split("/"))
             except NotYetValid as early:
@@ -1743,7 +2450,15 @@ def make_share_handler(app):
                 if self.command == "GET":
                     self._count_view(pid)
             elif rest == ["puzzle.json"]:
-                self._json(app.shared_view(pid))
+                view = app.shared_view(pid, self.headers.get("X-Visitor"))
+                view["video"] = app.video_state(pid, view)
+                self._json(view)
+            elif rest == ["video"]:  # MP4 vom Render-Container (0.1.17), nur wenn fertig und erlaubt
+                view = app.shared_view(pid)
+                if app.video_state(pid, view) != "ready" or not app.videos.file(pid):
+                    raise KeyError("video")
+                self._file(app.videos.file(pid), "video/mp4",
+                           {"Content-Disposition": f'attachment; filename="{download_name(view["title"])}.mp4"'})
             elif rest in (["photo.jpg"], ["card.jpg"]):
                 self._file(app.file(pid, rest[0]), "image/jpeg", {"Cache-Control": "private, max-age=3600"})
             elif rest == ["music"]:
@@ -1753,10 +2468,8 @@ def make_share_handler(app):
                 view = app.shared_view(pid)
                 if not view["download"]:
                     raise KeyError("download")
-                name = " ".join(re.sub(r"[^A-Za-z0-9 _-]+", " ", unicodedata.normalize("NFKD", view["title"])
-                                       .encode("ascii", "ignore").decode()).split()) or "Puzzle"
-                self._file(app.file(pid, "photo.jpg"), "image/jpeg",
-                           {"Content-Disposition": f'attachment; filename="{name}.jpg"'})
+                self._file(app.download_photo(pid, view), "image/jpeg",
+                           {"Content-Disposition": f'attachment; filename="{download_name(view["title"])}.jpg"'})
             else:
                 raise KeyError(self.path)
 
@@ -1784,7 +2497,8 @@ def make_share_handler(app):
             page = (page.replace("{{TITLE}}", title).replace("{{OG}}", og).replace("{{ROOT}}", root)
                     .replace("{{I18N}}", self._i18n(root)).replace("{{VERSION}}", VERSION)
                     .replace("{{UMAMI}}", app.share_umami_tag()).replace('<html lang="de">', f'<html lang="{lang}">'))
-            self._send(200, page.encode(), "text/html; charset=utf-8")
+            page, headers = self._secure_page(page)
+            self._send(200, page.encode(), "text/html; charset=utf-8", headers)
 
         def _static(self, parts):
             if parts in ([], [""]):
@@ -1824,10 +2538,22 @@ def make_share_handler(app):
             return morsel.value if morsel else None
 
         def _post(self, parts):
-            """Nur das Passwort-Formular an der Wurzel eines geschützten Links (Entscheid 49)."""
+            """Passwort-Formular an der Wurzel eines geschützten Links (Entscheid 49) und der Like-Knopf (0.1.8)."""
             body = self._read(4096)
             prefix = app.share_prefix.strip("/").split("/")
             rest = parts[len(prefix):] if parts[:len(prefix)] == prefix else []
+            if len(rest) == 2 and rest[1] == "like":
+                pid = app.shared_puzzle(rest[0])
+                if app.share_locked(rest[0], self._unlock_cookie()):
+                    raise PasswordRequired()
+                try:
+                    data = json.loads(body or b"{}")
+                except ValueError:
+                    data = None
+                if not isinstance(data, dict):
+                    raise ValueError("body")
+                self._json(app.set_like(pid, self.headers.get("X-Visitor"), data.get("on", True)))
+                return
             if len(rest) != 1:
                 raise KeyError(self.path)
             token = rest[0]
@@ -1839,7 +2565,9 @@ def make_share_handler(app):
                 self._pw_page(429, "lock")
                 return
             pw = (urllib.parse.parse_qs(body.decode("utf-8", "replace")).get("pw") or [""])[0]
+            name = puzzle_name(app._puzzle(app._by_token(token)))
             if app.password_ok(token, pw):
+                app.protocol("linkUnlock", name)
                 path = app.share_path(token)
                 cookie = (f"{UNLOCK_COOKIE}={app.unlock_value(token)}; Path={path.rstrip('/')}; "
                           f"Max-Age={UNLOCK_DAYS * 86400}; HttpOnly; SameSite=Lax")
@@ -1847,8 +2575,10 @@ def make_share_handler(app):
                     cookie += "; Secure"
                 self._send(303, b"", "text/plain", {"Location": path, "Set-Cookie": cookie})
             elif app.note_pw_fail(ip):
+                app.protocol("linkPwBlock", name)
                 self._pw_page(429, "lock")
             else:
+                app.protocol("linkPwWrong", name)
                 self._pw_page(401, "bad")
 
         def _delete(self, parts):
@@ -1863,6 +2593,10 @@ def serve_share(app, host, port):
 
 
 def main():
+    if (os.environ.get("PUZZLE_MODE") or "").strip().lower() == "kiosk":  # Kiosk für Gäste (docs/konzept-kiosk.md)
+        import kiosk
+        kiosk.main()
+        return
     url, key = os.environ.get("IMMICH_URL", "").strip(), os.environ.get("IMMICH_API_KEY", "").strip()
     if bool(url) != bool(key):
         raise SystemExit("IMMICH_URL und IMMICH_API_KEY gehören zusammen: beide setzen oder beide leer lassen.")
@@ -1870,7 +2604,8 @@ def main():
               os.environ.get("MUSIC_DIR", "/music"),
               share_port=int(os.environ.get("SHARE_PORT") or 0), share_public_url=os.environ.get("SHARE_PUBLIC_URL", ""),
               shares_api_key=os.environ.get("SHARES_API_KEY", ""), umami_url=os.environ.get("UMAMI_URL", ""),
-              umami_id=os.environ.get("UMAMI_WEBSITE_ID", ""), umami_links_id=os.environ.get("UMAMI_LINKS_ID", ""))
+              umami_id=os.environ.get("UMAMI_WEBSITE_ID", ""), umami_links_id=os.environ.get("UMAMI_LINKS_ID", ""),
+              notifier=Notifier.from_env())
     host, port = os.environ.get("HOST", "0.0.0.0"), int(os.environ.get("PORT", "8080"))
     auth = login.Auth.from_env(app.data_dir)
     print(f"immich-puzzle {VERSION} auf {host}:{port}, Ablage {app.puzzle_dir}, Musik {app.music_dir}"
@@ -1883,7 +2618,18 @@ def main():
     if app.share_port:
         print(f"Live-Links auf {host}:{app.share_port}, Präfix {app.share_prefix}", flush=True)
         threading.Thread(target=serve_share(app, host, app.share_port).serve_forever, daemon=True).start()
-    serve(app, host, port, auth, register).serve_forever()
+    print(app.notifier.describe(), flush=True)
+    app.run_start()
+
+    def stop(signum, frame):  # docker stop / Redeploy: sauberes Ende, kein «Neustart nach Absturz»
+        app.run_marker.end()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, stop)
+    app.start_alerts()
+    try:
+        serve(app, host, port, auth, register).serve_forever()
+    except KeyboardInterrupt:  # Strg+C lokal: auch sauber; jede andere Ausnahme lässt run.json liegen (= Absturz)
+        app.run_marker.end()
 
 
 if __name__ == "__main__":

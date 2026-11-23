@@ -68,10 +68,11 @@ function fitColumns(ids, width, track) {
 // ---------- Panel «Über» ----------
 // Gleich aufgebaut wie «Über» in Face-Timelapse: Name, Abschnitt Version, Abschnitt Immich mit Status und Version.
 // Braucht im Panel <div id="aboutBody">. Fragt bei jedem Öffnen neu nach (GET /api/version und /api/immich)
+// about.mode (z. B. "kiosk", gesetzt von kiosk-admin.js): Zeile «Modus» statt Abschnitt Immich, ohne /api/immich.
 // Entscheid 43: danach die Abschnitte aus about.sections ([Titel-Schlüssel, Text-Schlüssel], z. B. Herkunft und Lizenz)
 // und zuunterst die Box «Changelog» mit «N Änderungen in M Versionen» und «>». Die Box erscheint nur, wenn
 // GET /api/changelog antwortet und die Seite about.onChangelog setzt (öffnet rechts das Panel mit <div id="changelogBody">).
-const about = { app: null, appFailed: false, immich: { status: "checking" }, sections: [], changelog: null, onChangelog: null, changelogOpen: false };
+const about = { mode: "", app: null, appFailed: false, immich: { status: "checking" }, sections: [], changelog: null, onChangelog: null, changelogOpen: false };
 async function drawImmichStatus() {
   about.immich = { status: "checking" };
   drawAbout();
@@ -80,6 +81,7 @@ async function drawImmichStatus() {
     catch { about.appFailed = true; }
   }
   if (!about.changelog) await loadChangelog();
+  if (about.mode) { drawAbout(); return; }
   let info;
   try { info = await (await fetch("/api/immich")).json(); }
   catch (e) { info = { ok: false, error: String(e) }; }
@@ -100,19 +102,22 @@ function drawAbout() {
   if (about.app) {
     const rows = [[t("about.version"), about.app.version]];
     if (about.app.date) rows.push([t("about.built"), fmtDate(about.app.date)]);
+    if (about.mode) rows.push([t("about.mode"), t(`about.mode.${about.mode}`)]);
     parts.push(table(rows));
   } else parts.push(el("p", "muted", about.appFailed ? t("about.noVersion") : t("src.loading")));
   const im = about.immich, status = el("span");
-  status.append(el("span", `immichDot dot-${im.status}`), t({ connected: "immich.connected", checking: "immich.checking", error: "immich.error", off: "immich.off" }[im.status]));
-  const rows = [[t("immich.status"), status]];
-  if (im.version) rows.push([t("about.version"), im.version.replace(/^v/, "")]);
-  if (im.error) rows.push(["", el("span", "error", im.error)]);
-  parts.push(el("h3", "paneSection", t("immich.title")), table(rows));
-  if (im.status === "error") {
-    const p = el("p"), retry = el("button", "", t("immich.retry"));
-    retry.type = "button";
-    retry.addEventListener("click", drawImmichStatus);
-    p.append(retry); parts.push(p);
+  if (!about.mode) {
+    status.append(el("span", `immichDot dot-${im.status}`), t({ connected: "immich.connected", checking: "immich.checking", error: "immich.error", off: "immich.off" }[im.status]));
+    const rows = [[t("immich.status"), status]];
+    if (im.version) rows.push([t("about.version"), im.version.replace(/^v/, "")]);
+    if (im.error) rows.push(["", el("span", "error", im.error)]);
+    parts.push(el("h3", "paneSection", t("immich.title")), table(rows));
+    if (im.status === "error") {
+      const p = el("p"), retry = el("button", "", t("immich.retry"));
+      retry.type = "button";
+      retry.addEventListener("click", drawImmichStatus);
+      p.append(retry); parts.push(p);
+    }
   }
   for (const [title, text] of about.sections) parts.push(el("h3", "paneSection", t(title)), el("p", "aboutText", t(text)));
   const log = about.changelog;
