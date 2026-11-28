@@ -36,6 +36,18 @@ function t(key, vars) {
   });
 }
 // Datum und Zeit in der gewählten Sprache. options wie bei Intl.DateTimeFormat
+// Zeitzone des Servers (Entscheid 84, <meta name="tz">): Ablaufdaten gelten bis 23:59:59 dieser Zone, nicht der des Browsers.
+const SERVER_TZ = (() => {
+  const tz = document.querySelector('meta[name="tz"]')?.content;
+  try { return tz && new Intl.DateTimeFormat("en", { timeZone: tz }) && tz; } catch { return undefined; }
+})();
+// Tag eines Zeitpunkts in der Server-Zone als JJJJ-MM-TT (für Datumsfelder und Tagesvergleiche)
+function serverDay(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: SERVER_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+// Ablauf-/Startdatum anzeigen, in der Server-Zone
+function fmtDay(value) { return fmtDate(value, { dateStyle: "medium", timeZone: SERVER_TZ }); }
 function fmtDate(value, options) {
   const d = value instanceof Date ? value : new Date(value);
   return isNaN(d) ? "" : d.toLocaleString(locale(), options || { dateStyle: "medium" });

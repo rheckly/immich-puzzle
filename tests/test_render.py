@@ -58,11 +58,21 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(job["title"], "Ferien")
         self.assertEqual(job["sub"], "Ein Puzzle-Gruss für dich · 14.07.2026 · Bern")
         self.assertEqual(job["foot"], ["Erstellt mit example.com", "© 2026 by Roger"])
-        self.assertEqual(job["music"], {"src": "lib", "path": "Test/Ton.wav", "volume": .5, "fade": True})
+        self.assertEqual(job["music"], {"src": "lib", "path": "Test/Ton.wav", "volume": .5, "fade": True, "tail": True})
         self.assertNotIn("music", job["config"])
         kiosk = self.v.job(PID, self.puzzle(), self.folder, {**INFO, "kiosk": True, "meta": None, "lang": "en"})
         self.assertEqual(kiosk["foot"], ["Made with Puzzle"])
         self.assertEqual(kiosk["sub"], "A puzzle greeting for you")
+
+    def test_music_tail_switch(self):
+        """«Musik nach dem Puzzle weiterlaufen lassen»: Standard an, aus wandert in den Auftrag und ändert den Hash."""
+        on = self.v.job(PID, self.puzzle(), self.folder, INFO)
+        p = self.puzzle()
+        p["config"]["music"]["tail"] = False
+        off = self.v.job(PID, p, self.folder, INFO)
+        self.assertTrue(on["music"]["tail"])
+        self.assertFalse(off["music"]["tail"])
+        self.assertNotEqual(on["hash"], off["hash"])
 
     def test_music_outside_folder_ignored(self):
         p = self.puzzle()

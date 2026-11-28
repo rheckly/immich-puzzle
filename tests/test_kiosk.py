@@ -183,6 +183,34 @@ class KioskTest(unittest.TestCase):
         self.assertIn(token, self.app.gone)
         self.assertEqual(self.app.job["runs"][0]["by"], "Test")
 
+    def test_search_engines(self):
+        """Checkliste öffentliche Website: robots, Sitemap, Titel, Beschreibung, canonical, noindex für Persönliches."""
+        status, robots = self.call("GET", self.base + "/robots.txt", raw=True)
+        self.assertEqual(status, 200)
+        robots = robots.decode()
+        for line in ("Allow: /", "Disallow: /edit/", "Disallow: /api/", "Disallow: /login", "Disallow: /puzzles/",
+                     f"Sitemap: {self.base}/sitemap.xml"):
+            self.assertIn(line + "\n", robots)
+        status, sitemap = self.call("GET", self.base + "/sitemap.xml", raw=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(re.findall(rb"<loc>(.*?)</loc>", sitemap), [f"{self.base}/".encode(), f"{self.base}/datenschutz".encode()])
+        status, page = self.call("GET", self.base + "/", raw=True)
+        self.assertIn(b"<title>Puzzle \xc2\xb7 Turn your photo into a puzzle</title>", page)
+        desc = re.search(rb'<meta name="description" content="([^"]+)">', page).group(1)
+        self.assertTrue(50 <= len(desc.decode()) <= 160)
+        self.assertIn(f'<link rel="canonical" href="{self.base}/">'.encode(), page)
+        self.assertNotIn(b"noindex", page)
+        status, page = self.call("GET", self.base + "/edit/" + "a" * 32, raw=True)
+        self.assertEqual(status, 200)
+        self.assertIn(b'<meta name="robots" content="noindex, nofollow">', page)
+        self.assertNotIn(b'rel="canonical"', page)
+        status, page = self.call("GET", self.base + "/privacy", raw=True)
+        self.assertIn(f'<link rel="canonical" href="{self.base}/datenschutz">'.encode(), page)
+        self.assertIn(b'<meta name="description"', page)
+        status, page = self.call("GET", self.abase + "/", raw=True)
+        self.assertIn(b"<title>Puzzle</title>", page)  # Admin unverändert
+        self.assertNotIn(b'name="description"', page)
+
     def test_privacy(self):
         self.app._set_setting("kiosk_contact", "kiosk@example.com")
         status, page = self.call("GET", self.base + "/datenschutz", raw=True)

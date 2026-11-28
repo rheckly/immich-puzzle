@@ -34,6 +34,7 @@ from PIL import Image, ImageOps
 
 import auth as login
 import family
+from collage_source import CollageError, CollageSource
 import render
 from immich import Immich, ImmichError, check_id
 from msg import Msg, fields, of
@@ -45,8 +46,10 @@ except ImportError:  # pragma: no cover
     mutagen = None
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSION = "0.1.19"  # bei jedem Build hochzählen, zuoberst in app/CHANGELOG.md gleich
-VERSION_DATE = "23.11.2026"
+VERSION = "0.1.30"  # bei jedem Build hochzählen, zuoberst in app/CHANGELOG.md gleich
+VERSION_DATE = "25.11.2026"
+# «Erstellt» in «Über» mit Datum und Uhrzeit (Entscheid 27): Stand der App-Dateien = Änderungszeit von server.py
+BUILT = datetime.fromtimestamp(os.path.getmtime(__file__), timezone.utc).isoformat(timespec="seconds")
 
 
 # ---------- Changelog für das Panel «Über» (Entscheid 43) ----------
@@ -111,7 +114,7 @@ FAMILY_ID = "puzzle"  # Eigene id in family.json, wenn FAMILY_ID fehlt
 
 def family_register():
     """Register der Familien-Dienste (Entscheid 21). family.py ist 1:1 aus Mosaik und nimmt ohne FAMILY_ID «mosaik» an"""
-    register = family.Register.from_env()
+    register = family.Register.from_env(VERSION)
     if not (os.environ.get("FAMILY_ID") or "").strip():
         register.own_id = FAMILY_ID
     return register
@@ -126,6 +129,7 @@ def text_files():
 
 # ---------- Live-Link: ein Puzzle zum Abspielen auf einem zweiten Port (wie in Collage) ----------
 VIEW_DAYS = 365  # So viele Tage Aufrufe pro Tag behalten (Entscheid 37)
+STORAGE_EVERY = 3600  # Sekunden: Speicher für die Statistik höchstens so oft zählen (os.walk), nie pro Anfrage
 ALERT_KINDS = ("errors", "summary")  # Meldungen über ntfy (0.1.18): je Art ein Schalter, Werkseinstellung an
 ALERT_TIME = "08:00"  # Tageszusammenfassung für den Vortag
 HEARTBEAT = 60  # Sekunden: Takt der Meldeschleife (Lebenszeichen in run.json, Tageszusammenfassung)
@@ -156,6 +160,13 @@ def day_start(ts):
     """Beginn des Tages eines Zeitstempels, 00:00:00 Lokalzeit, als Epoch."""
     d = datetime.fromtimestamp(ts).date()
     return datetime(d.year, d.month, d.day).timestamp()
+
+
+def tz_meta():
+    """Zeitzone des Containers für die Seite (Entscheid 84): Ablauf und «heute» rechnet der Browser in derselben
+    Zone wie der Server (day_end), nicht in seiner eigenen. Nur IANA-Namen wie Europe/Zurich, sonst nichts."""
+    tz = os.environ.get("TZ", "").lstrip(":")
+    return f'<meta name="tz" content="{tz}">' if re.fullmatch(r"[A-Za-z_]+(?:/[A-Za-z0-9_+-]+)*", tz) else ""
 
 
 def link_from(link):
@@ -679,7 +690,7 @@ def clean_config(c):
     elif isinstance(music, dict) and isinstance(music.get("id"), str):
         out["music"] = {"id": music["id"][:300], "name": str(music.get("name") or "")[:120],
                         "volume": round(float(_unit(music.get("volume", 0.8))), 3),
-                        "fade": bool(music.get("fade", True))}
+                        "fade": bool(music.get("fade", True)), "tail": bool(music.get("tail", True))}
     else:
         raise bad_setting("music")
     if out["durMode"] == "music" and not out["music"]:
@@ -899,6 +910,8 @@ class App:
             self.settings = {}
         self._apply_share_url()
         self.views_seen = {}
+        self.downloads_seen = {}  # (Token, IP) → Zeitpunkt: ein Download zählt einmal pro VIEW_WINDOW (Range-Anfragen)
+        self._storage = None  # (Zeitpunkt, {bytes, files, measured}, {Puzzle-ID: Bytes}) aus storage_scan()
         self.notifier = notifier or Notifier()  # ntfy (0.1.18), ohne NTFY_URL/NTFY_TOPIC aus
         self.run_marker = RunMarker(os.path.join(data_dir, "run.json"), VERSION)  # Absturz erkennen
         umami_url, umami_id, umami_links_id = (umami_url or "").strip().rstrip("/"), (umami_id or "").strip(), (umami_links_id or "").strip()
@@ -1418,7 +1431,8 @@ class App:
         cfg = dict(p.get("config") or {})
         music = cfg.pop("music", None)
         out = {"title": share_title(p), "by": p.get("by") or "", "config": cfg,
-               "music": {"volume": music.get("volume", .8), "fade": music.get("fade", True)} if music else None,
+               "music": {"volume": music.get("volume", .8), "fade": music.get("fade", True),
+                         "tail": music.get("tail", True)} if music else None,
                "download": bool(link.get("download")), "meta": None,
                "year": datetime.fromtimestamp(p.get("created") or time.time()).year,
                "madeWith": self.settings.get("made_with_url") or "",
@@ -1497,10 +1511,12 @@ class App:
                 else:
                     likers.remove(key)
                 link = {**link, "likers": likers}
+                name = puzzle_name(self.puzzles[pid])
                 if on:  # gesetzte Likes pro Tag für die Tageszusammenfassung (0.1.18), nur Tag und Zahl
                     link["like_days"] = count_day(link.get("like_days"), time.time())
-        if changed:  # nur in den Angaben des Links, nicht im Protokoll und nicht in der Shares-API (Roger 22.11.2026)
+        if changed:  # Protokoll «Like gesetzt/zurückgenommen» ohne Kennung und IP, Wer = Besucher (Entscheid 78, 0.1.28)
             self._update(pid, online_link=link)
+            self.protocol("likeOn" if on else "likeOff", name)
         return {"likes": len(likers), "liked": on}
 
     def count_view(self, pid, ip, agent, now=None):
@@ -1523,6 +1539,29 @@ class App:
             name = puzzle_name(self.puzzles[pid])
         self._update(pid, online_link=link)
         self.protocol("linkView", name)
+        return True
+
+    def count_download(self, pid, ip, agent, kind="photo", now=None):
+        """Ein Download über den Live-Link (Foto oder MP4), gleiche Regeln wie count_view: keine Bots, Tag in der TZ des
+        Servers, ein Klick pro Besucher und VIEW_WINDOW (Range-Anfragen eines Videos zählen nicht mehrfach).
+        Gespeichert werden nur Zahl und Tage, keine IP."""
+        now = time.time() if now is None else now
+        if not agent or VIEW_BOTS.search(agent):
+            return False
+        with self.lock:
+            link = (self.puzzles.get(pid) or {}).get("online_link")
+            if not link or not link.get("token"):
+                return False
+            seen = self.downloads_seen
+            for key in [k for k, at in seen.items() if now - at >= VIEW_WINDOW]:
+                del seen[key]
+            key = (link["token"], ip, kind)  # Foto und Video getrennt
+            if key in seen:
+                return False
+            seen[key] = now
+            link = {**link, "downloads": int(link.get("downloads") or 0) + 1,
+                    "download_days": count_day(link.get("download_days"), now)}
+        self._update(pid, online_link=link)
         return True
 
     def share_path(self, token):
@@ -1789,26 +1828,102 @@ class App:
                 f"connect-src {connect}; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 
     @staticmethod
-    def view_days(link, now=None):
+    def capped_days(days, total, field, now=None):
+        """Tage für die Shares-API: neueste zuerst, nur Tage > 0, höchstens VIEW_DAYS Tage, Summe nie über total."""
         now = time.time() if now is None else now
         oldest = time.strftime("%Y-%m-%d", time.localtime(now - VIEW_DAYS * 86400))
-        left = int(link.get("views") or 0)
-        days = []
-        for day, n in sorted((link.get("view_days") or {}).items(), reverse=True):
+        left = int(total or 0)
+        out = []
+        for day, n in sorted((days or {}).items(), reverse=True):
             if day <= oldest:
                 break
             n = min(int(n or 0), left)
             if n > 0:
-                days.append({"date": day, "views": n})
+                out.append({"date": day, field: n})
                 left -= n
-        return days
+        return out
+
+    @staticmethod
+    def view_days(link, now=None):
+        return App.capped_days(link.get("view_days"), link.get("views"), "views", now)
+
+    @staticmethod
+    def download_days(link, now=None):
+        return App.capped_days(link.get("download_days"), link.get("downloads"), "downloads", now)
+
+    @staticmethod
+    def like_days(link, now=None):
+        """Gesetzte Likes pro Tag für die Shares-API, neueste zuerst, nur Tage > 0, höchstens VIEW_DAYS Tage.
+        Zurücknehmen zieht nicht ab (Entscheid 79, docs/shares-api.md «Likes» im Smart-Repo)"""
+        now = time.time() if now is None else now
+        oldest = time.strftime("%Y-%m-%d", time.localtime(now - VIEW_DAYS * 86400))
+        return [{"date": d, "likes": int(n)} for d, n in sorted((link.get("like_days") or {}).items(), reverse=True)
+                if d > oldest and int(n or 0) > 0]
 
     def internal_shares(self, app_url):
-        """GET /api/internal/shares für «Shared Links» in Smart Albums (docs/shares-api.md dort)."""
+        """GET /api/internal/shares für «Shared Links» in Smart Albums (docs/shares-api.md dort), mit works und storage
+        für die Statistik (Entscheide 86-93, 95)."""
         with self.lock:
-            items = [json.loads(json.dumps(p)) for p in self.puzzles.values() if (p.get("online_link") or {}).get("token")]
+            every = [json.loads(json.dumps(p)) for p in self.puzzles.values()]
+        items = [p for p in every if (p.get("online_link") or {}).get("token")]
         items.sort(key=lambda p: p["online_link"].get("created") or 0, reverse=True)
-        return {"source": FAMILY_ID, "version": VERSION, "shares": [self._internal_entry(p, app_url) for p in items]}
+        storage, sizes = self.storage_scan()
+        return {"source": FAMILY_ID, "version": VERSION, "works": self._works(every, sizes), "storage": storage,
+                "shares": [self._internal_entry(p, app_url) for p in items]}
+
+    def stats(self, app_url):
+        """GET /api/stats (Entscheid 92): dieselben Daten wie /api/internal/shares, mit Login statt Schlüssel,
+        dazu today (Tag in der TZ des Servers) und keep (so viele Tage bleiben gespeichert)."""
+        return {**self.internal_shares(app_url), "today": time.strftime("%Y-%m-%d"), "keep": VIEW_DAYS}
+
+    def _works(self, puzzles, sizes):
+        """Jedes Puzzle, auch ohne Link, neueste zuerst. video = es gibt ein fertiges MP4, bytes aus storage_scan()."""
+        iso = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if t else None
+        out = []
+        for p in sorted(puzzles, key=lambda p: p.get("created") or 0, reverse=True):
+            work = {"id": p["id"], "title": puzzle_name(p), "created": iso(p.get("created")),
+                    "video": bool(self.videos.file(p["id"]))}
+            if p["id"] in sizes:
+                work["bytes"] = sizes[p["id"]]
+            out.append(work)
+        return out
+
+    def storage_scan(self, fresh=False):
+        """Belegter Speicher (DATA_DIR mit Puzzles, Videos, Musik, Einstellungen; PUZZLE_DIR dazu, wenn ausserhalb) und
+        Bytes je Puzzle (eigener Ordner + render/videos/{id}.*), höchstens alle STORAGE_EVERY Sekunden mit os.walk
+        gezählt. Die Ausgabe enthält keine Pfade und Dateinamen."""
+        cached = self._storage
+        if cached and not fresh and time.time() - cached[0] < STORAGE_EVERY:
+            return dict(cached[1]), dict(cached[2])
+        data_root, puzzle_root = os.path.abspath(self.data_dir), os.path.abspath(self.puzzle_dir)
+        video_root = os.path.join(data_root, "render", "videos")
+        roots = [data_root]
+        if os.path.relpath(puzzle_root, data_root).startswith(".."):
+            roots.append(puzzle_root)  # PUZZLE_DIR ausserhalb von DATA_DIR: auch zählen
+        with self.lock:
+            known = set(self.puzzles)
+        total = files = 0
+        sizes = {}
+        for root in roots:
+            for folder, _dirs, names in os.walk(root):
+                here = os.path.abspath(folder)
+                rel = os.path.relpath(here, puzzle_root)
+                pid = rel.split(os.sep, 1)[0] if rel != "." and not rel.startswith("..") else None
+                for name in names:
+                    try:
+                        size = os.path.getsize(os.path.join(folder, name))
+                    except OSError:
+                        continue
+                    total += size
+                    files += 1
+                    owner = pid if pid in known else None
+                    if owner is None and here == video_root and name.split(".", 1)[0] in known:
+                        owner = name.split(".", 1)[0]  # {id}.mp4, {id}.json, {id}.photo-….jpg
+                    if owner:
+                        sizes[owner] = sizes.get(owner, 0) + size
+        storage = {"bytes": total, "files": files, "measured": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        self._storage = (time.time(), storage, sizes)
+        return dict(storage), dict(sizes)
 
     def _internal_entry(self, p, app_url):
         iso = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if t else None
@@ -1822,6 +1937,9 @@ class App:
                 "person": None, "created": iso(link.get("created")),
                 "validFrom": iso(link_from(link)), "expires": iso(link.get("expires")),
                 "protected": bool(link.get("protected")), "views": int(link.get("views") or 0), "viewDays": self.view_days(link),
+                "likes": len(link.get("likers") or []), "likeDays": self.like_days(link),  # Entscheide 78, 79
+                "work": p["id"], "downloads": int(link.get("downloads") or 0),  # Statistik (Entscheide 86-93)
+                "downloadDays": self.download_days(link),
                 "preview": url + "card.jpg" if url and live else None,
                 "open": f"{app_url}/?id={urllib.parse.quote(p['id'])}", "revocable": True,
                 "actions": list(SHARE_ACTIONS), "active": link_active(link), "download": bool(link.get("download")),
@@ -1877,6 +1995,8 @@ def image_type(data):
 
 
 def make_handler(app, auth=None, register=None):
+    collages = CollageSource(register, app.shares_api_key)  # Collage als Motiv (Entscheid 66), nur Admin
+
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -2186,6 +2306,9 @@ def make_handler(app, auth=None, register=None):
         def _strict_page(self):
             return False  # Kiosk-Gäste: strenge CSP mit Nonce für den Editor
 
+        def _title(self):
+            return "Puzzle"  # Kiosk-Gäste: sprechender Titel für Suchmaschinen
+
         def _secure_page(self, page):
             """Seite mit Nonce und Headern: CSP, keine Einbettung, HSTS hinter https."""
             nonce = secrets.token_urlsafe(16)
@@ -2216,17 +2339,17 @@ def make_handler(app, auth=None, register=None):
                 self._json(register.view() if register else {"self": None, "services": [], "openMode": family.OPEN_MODE_DEFAULT})
             elif parts == [""]:
                 with open(os.path.join(APP_DIR, "puzzle.html"), encoding="utf-8") as f:
-                    page = f.read().replace("{{UMAMI}}", app.umami_tag).replace("{{VERSION}}", VERSION).replace("{{OG}}", self._app_card()).replace("{{MODE}}", self._mode_tags()).replace("</head>", self._head_tags() + "</head>", 1)
+                    page = f.read().replace("{{UMAMI}}", app.umami_tag).replace("{{VERSION}}", VERSION).replace("{{OG}}", self._app_card()).replace("{{MODE}}", self._mode_tags()).replace("<title>Puzzle</title>", f"<title>{html.escape(self._title())}</title>", 1).replace("</head>", tz_meta() + self._head_tags() + "</head>", 1)
                 page, headers = page.replace("{{I18N}}", self._i18n()), None
                 if self._strict_page():
                     page, headers = self._secure_page(page)
                 self._send(200, page.encode(), "text/html; charset=utf-8", headers)
-            elif parts in (["common.css"], ["common.js"], ["profile.js"], ["i18n.js"], ["puzzle-engine.js"]) \
+            elif parts in (["common.css"], ["common.js"], ["profile.js"], ["i18n.js"], ["puzzle-engine.js"], ["qr.js"]) \
                     or (len(parts) == 1 and parts[0] in text_files()):
                 self._script(parts[0])
             elif parts == ["api", "version"]:
                 day, month, year = VERSION_DATE.split(".")
-                self._json({"version": VERSION, "date": f"{year}-{month}-{day}", "immich": bool(app.immich)})
+                self._json({"version": VERSION, "date": f"{year}-{month}-{day}", "built": BUILT, "immich": bool(app.immich), "collage": collages.enabled()})
             elif parts == ["api", "changelog"]:
                 self._json({"types": list(CHANGE_TYPES), "releases": read_changelog()})
             elif parts == ["api", "immich"]:
@@ -2242,6 +2365,17 @@ def make_handler(app, auth=None, register=None):
             elif len(parts) == 4 and parts[:2] == ["api", "assets"] and parts[3] in ("thumb", "preview"):
                 data = app.need_immich().image(check_id(parts[2]), "thumbnail" if parts[3] == "thumb" else "preview")
                 self._send(200, data, image_type(data), {"Cache-Control": "private, max-age=3600"})
+            elif parts == ["api", "collages"]:  # Panel «Collage wählen» (Entscheid 66)
+                self._json(collages.view())
+            elif len(parts) == 4 and parts[:2] == ["api", "collages"] and parts[3] in ("thumb", "image"):
+                try:
+                    data, ctype = collages.file(parts[2], parts[3])
+                except CollageError as e:
+                    if e.code in ("missing", "off"):
+                        raise KeyError(self.path)
+                    self._json(fields("error", Msg("collage", "Collage ist nicht erreichbar.")), 502)
+                    return
+                self._send(200, data, ctype, {"Cache-Control": "private, max-age=3600"})
             elif parts == ["api", "music"]:
                 self._json(app.music_list())
             elif len(parts) == 3 and parts[:2] == ["api", "music"]:
@@ -2257,6 +2391,8 @@ def make_handler(app, auth=None, register=None):
                 self._json(app.list_shares())
             elif parts == ["api", "protocol"]:
                 self._json(app.protocol_entries())
+            elif parts == ["api", "stats"]:  # Statistik-Box (Entscheid 92), hinter dem normalen Login
+                self._json(app.stats(self._app_url()))
             else:
                 raise KeyError(self.path)
 
@@ -2459,6 +2595,7 @@ def make_share_handler(app):
                     raise KeyError("video")
                 self._file(app.videos.file(pid), "video/mp4",
                            {"Content-Disposition": f'attachment; filename="{download_name(view["title"])}.mp4"'})
+                self._count_download(pid, "video")
             elif rest in (["photo.jpg"], ["card.jpg"]):
                 self._file(app.file(pid, rest[0]), "image/jpeg", {"Cache-Control": "private, max-age=3600"})
             elif rest == ["music"]:
@@ -2470,6 +2607,7 @@ def make_share_handler(app):
                     raise KeyError("download")
                 self._file(app.download_photo(pid, view), "image/jpeg",
                            {"Content-Disposition": f'attachment; filename="{download_name(view["title"])}.jpg"'})
+                self._count_download(pid, "photo")
             else:
                 raise KeyError(self.path)
 
@@ -2524,6 +2662,16 @@ def make_share_handler(app):
                 return
             try:
                 app.count_view(pid, self._ip(), self.headers.get("User-Agent") or "")
+            except Exception:
+                traceback.print_exc()
+
+        def _count_download(self, pid, kind):
+            """Statistik (Entscheide 86-93): nur GET, keine Vorab-Abrufe; Doppelte filtert app.count_download."""
+            purpose = " ".join(self.headers.get(h) or "" for h in ("Sec-Purpose", "Purpose", "X-Purpose", "X-Moz")).lower()
+            if self.command != "GET" or "prefetch" in purpose or "preview" in purpose:
+                return
+            try:
+                app.count_download(pid, self._ip(), self.headers.get("User-Agent") or "", kind)
             except Exception:
                 traceback.print_exc()
 

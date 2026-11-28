@@ -57,84 +57,7 @@
   let status = null, kTitle = null, gone = false, showGone = null;
   const statusLoad = realFetch("/api/kiosk").then(r => r.json()).then(s => { status = s; }).catch(() => { status = null; });
 
-  // ---------- QR-Code (Byte-Modus, Stufe M, Version 1–6, Maske 0; wie docs/design/mockups/puzzle/src/qr.py) ----------
-  const QM = { 1: [16, 10, 1], 2: [28, 16, 1], 3: [44, 26, 1], 4: [64, 18, 2], 5: [86, 24, 2], 6: [108, 16, 4] };
-  const QA = { 1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34] };
-  const mul = (x, y) => { let z = 0; for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; } return z & 0xFF; };
-  function divisor(deg) {
-    const r = new Array(deg - 1).fill(0).concat([1]); let root = 1;
-    for (let n = 0; n < deg; n++) {
-      for (let j = 0; j < deg; j++) { r[j] = mul(r[j], root); if (j + 1 < deg) r[j] ^= r[j + 1]; }
-      root = mul(root, 2);
-    }
-    return r;
-  }
-  function remainder(data, div) {
-    const r = new Array(div.length).fill(0);
-    for (const b of data) { const f = b ^ r.shift(); r.push(0); div.forEach((c, i) => { r[i] ^= mul(c, f); }); }
-    return r;
-  }
-  function qrMatrix(text) {
-    const raw = [...new TextEncoder().encode(text)];
-    const ver = Object.keys(QM).map(Number).find(v => raw.length + 2 <= QM[v][0]);
-    if (!ver) return null;
-    const [ndata, necc, nblk] = QM[ver];
-    let bits = [0, 1, 0, 0]; for (let i = 7; i >= 0; i--) bits.push((raw.length >>> i) & 1);
-    for (const b of raw) for (let i = 7; i >= 0; i--) bits.push((b >>> i) & 1);
-    bits = bits.concat(new Array(Math.min(4, ndata * 8 - bits.length)).fill(0));
-    while (bits.length % 8) bits.push(0);
-    const data = []; for (let i = 0; i < bits.length; i += 8) data.push(parseInt(bits.slice(i, i + 8).join(""), 2));
-    for (let pad = 0xEC; data.length < ndata; pad ^= 0xEC ^ 0x11) data.push(pad);
-    const blen = ndata / nblk, div = divisor(necc);
-    const blocks = Array.from({ length: nblk }, (_, i) => data.slice(i * blen, (i + 1) * blen)), eccs = blocks.map(b => remainder(b, div));
-    const cw = [];
-    for (let i = 0; i < blen; i++) for (const b of blocks) cw.push(b[i]);
-    for (let i = 0; i < necc; i++) for (const e of eccs) cw.push(e[i]);
-    const n = ver * 4 + 17, mx = Array.from({ length: n }, () => new Array(n).fill(0)), fn = Array.from({ length: n }, () => new Array(n).fill(false));
-    const put = (x, y, d) => { mx[y][x] = d ? 1 : 0; fn[y][x] = true; };
-    for (let i = 0; i < n; i++) { put(6, i, i % 2 === 0); put(i, 6, i % 2 === 0); }
-    for (const [cx, cy] of [[3, 3], [n - 4, 3], [3, n - 4]])
-      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
-        const x = cx + dx, y = cy + dy, d = Math.max(Math.abs(dx), Math.abs(dy));
-        if (x >= 0 && x < n && y >= 0 && y < n) put(x, y, d !== 2 && d !== 4);
-      }
-    const al = QA[ver];
-    al.forEach((ax, i) => al.forEach((ay, j) => {
-      if ((i === 0 && j === 0) || (i === 0 && j === al.length - 1) || (i === al.length - 1 && j === 0)) return;
-      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) put(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
-    }));
-    let rem = 0; for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
-    const f = ((0 << 10) | rem) ^ 0x5412, bit = i => (f >>> i) & 1;
-    for (let i = 0; i < 6; i++) put(8, i, bit(i));
-    put(8, 7, bit(6)); put(8, 8, bit(7)); put(7, 8, bit(8));
-    for (let i = 9; i < 15; i++) put(14 - i, 8, bit(i));
-    for (let i = 0; i < 8; i++) put(n - 1 - i, 8, bit(i));
-    for (let i = 8; i < 15; i++) put(8, n - 15 + i, bit(i));
-    put(8, n - 8, true);
-    let k = 0;
-    for (let right = n - 1; right >= 1; right -= 2) {
-      if (right === 6) right = 5;
-      for (let vert = 0; vert < n; vert++) for (let j = 0; j < 2; j++) {
-        const x = right - j, up = ((right + 1) & 2) === 0, y = up ? n - 1 - vert : vert;
-        if (!fn[y][x] && k < cw.length * 8) { mx[y][x] = (cw[k >>> 3] >>> (7 - (k & 7))) & 1; k++; }
-      }
-    }
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!fn[y][x] && (x + y) % 2 === 0) mx[y][x] ^= 1;
-    return mx;
-  }
-  function qrSvg(text) {
-    const mx = qrMatrix(text); if (!mx) return null;
-    const n = mx.length, q = 4, ns = "http://www.w3.org/2000/svg";
-    let d = ""; mx.forEach((row, y) => row.forEach((v, x) => { if (v) d += `M${x + q},${y + q}h1v1h-1z`; }));
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", `0 0 ${n + 2 * q} ${n + 2 * q}`); svg.setAttribute("shape-rendering", "crispEdges");
-    svg.setAttribute("role", "img"); svg.setAttribute("class", "kQr");
-    const bg = document.createElementNS(ns, "rect"); bg.setAttribute("width", "100%"); bg.setAttribute("height", "100%"); bg.setAttribute("fill", "#fff");
-    const path = document.createElementNS(ns, "path"); path.setAttribute("d", d); path.setAttribute("fill", "#000");
-    svg.append(bg, path);
-    return svg;
-  }
-  window.kioskQr = qrMatrix;  // für Tests im Browser
+  // QR-Code: window.qrSvg aus qr.js (lädt puzzle.html, seit 0.1.28 gemeinsam mit der App, Entscheid 80)
 
   // ---------- Oberfläche kürzen, sobald puzzle.html fertig ist ----------
   const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -143,13 +66,14 @@
   const editUrl = () => st.id && keyOf(st.id) ? `${location.origin}/edit/${st.id}#${keyOf(st.id)}` : "";
 
   document.addEventListener("DOMContentLoaded", async () => {
-    // Was Gäste nicht brauchen: Details, Listen, Protokoll, Einstellungen, Über, Profil, Immich, eigene Musik, Link-Optionen
-    ["P27", "P22", "P9", "P30", "P11", "P12"].forEach(p => { const b = boxOf(p); if (b) b.classList.add("kOff"); });
-    hide("familyBtn", "profile", "musicUpBtn", "imBtn", "mkDirect", "pwRow", "lkFrom", "lkUntil", "lkNone", "delRow");
+    // Was Gäste nicht brauchen: Details, Listen, Protokoll, Einstellungen, Statistik, Über, Profil, Immich, eigene Musik, Link-Optionen
+    ["P27", "P22", "P9", "P30", "P11", "P12", "P34"].forEach(p => { const b = boxOf(p); if (b) b.classList.add("kOff"); });
+    hide("familyBtn", "profile", "musicUpBtn", "imBtn", "colBtn", "mkDirect", "pwRow", "lkFrom", "lkUntil", "lkNone", "delRow");
     ["lkActive", "lkDl", "lkMeta", "lkPw"].forEach(id => { const r = $(id) && $(id).closest(".swRow"); if (r) r.classList.add("kOff"); });
     const fromLbl = document.querySelector('label[for="lkFrom"]'); if (fromLbl) fromLbl.classList.add("kOff");
     const tag = document.querySelector(".brandTag"); if (tag) { tag.dataset.i18n = "k.tag"; tag.textContent = t("k.tag"); }
     document.querySelector(".brand").removeAttribute("title");
+    const pageTitle = () => { document.title = "Puzzle · " + t("k.tag"); }; pageTitle(); onLang(pageTitle);  // Server: englisch für Suchmaschinen
 
     // Schritte: ohne «Puzzle Details»; alle Schritte stellt der Gast selbst ein
     STEP_ORDER.splice(STEP_ORDER.indexOf("P27"), 1);
@@ -212,7 +136,7 @@
     const drawKiosk = () => {
       const url = linkUrl();
       if (url !== lastQr) {
-        lastQr = url; const holder = qrBox.querySelector(".kQrImg"), svg = url ? qrSvg(new URL(url, location.href).href) : null;
+        lastQr = url; const holder = qrBox.querySelector(".kQrImg"), svg = url && window.qrSvg ? window.qrSvg(new URL(url, location.href).href, "kQr") : null;
         holder.replaceChildren(...(svg ? [svg] : [])); qrBox.classList.toggle("kOff", !svg);
       }
       edTxt.textContent = editUrl();
@@ -357,9 +281,9 @@
     const wrapAfter = window.afterMotif;
     window.afterMotif = function () { if (st.quick || !flow()) return wrapAfter(); st.cropDone = true; go("P2"); drawFlow(); };
 
-    // 2 Gestalten: Vorschau, Anzahl Teile, Gesamtzeit, Gruss; «Erweitert» eingeklappt
+    // 2 Gestalten: oben Gruss mit eigenem «Erweitert» (Schrift, Farbe), dann Vorschau, Anzahl Teile, Gesamtzeit; unteres «Erweitert» eingeklappt
     const p3 = panelOf("P3"), oldBody = p3.querySelector(".mkBody");
-    const gest = mk("div", "mkBody kGest"), pv = mk("div", "kPv"), side = mk("div", "kSide"), ctl = mk("div", "kCtl");
+    const gest = mk("div", "mkBody kGest"), top = mk("div", "kTop kCtl"), pv = mk("div", "kPv"), side = mk("div", "kSide"), ctl = mk("div", "kCtl");
     pv.append($("pWrap"), panelOf("P8").querySelector(".player"));
     ctl.append(label(oldBody.querySelector('[data-i18n="p.count"]'), "k.count"), $("counts"), $("gridInfo"));
     if (s.music) ctl.append(...document.querySelectorAll("#sideTempo .mkMusicSel"), $("durTabs"), $("musicCut"));
@@ -367,21 +291,49 @@
     const gL = mk("label", "lbl"); gL.htmlFor = "kGreet"; label(gL, "k.greet");
     const gT = mk("textarea"); gT.id = "kGreet"; gT.rows = 2; gT.maxLength = 300; gT.dataset.i18nPlaceholder = "k.greetPh"; gT.placeholder = t("k.greetPh");
     gT.oninput = () => { st.tx = "text"; $("txt").value = gT.value; $("txt").oninput(); };
-    ctl.append(gL, gT, label(mk("p", "muted mkNote"), "k.greetNote"));
-    const more = mk("details", "kMore"), sec = key => label(mk("h3", "paneSection"), key);
+    const more = mk("details", "kMore"), txtMore = mk("details", "kMore kMoreTxt"), sec = key => label(mk("h3", "paneSection"), key);
     const ramp = $("mkRamp"), rampR = ramp.nextElementSibling;
     const fonts = mk("div", "mkFont kFonts"); fontButtons(fonts, ["hand", "elegant", "sans"]);
     const ghostRow = $("optGhost").closest(".swRow"); label(ghostRow.querySelector("span"), "k.ghost");
     more.append(label(mk("summary"), "k.more"),
       sec("k.tempo"), document.querySelector('label[for="mkLead"]'), $("mkLead"), $("mkFrameOnly"), document.querySelector('label[for="mkRamp"]'), ramp, rampR,
       oldBody.querySelector('[data-i18n="p.startLbl"]'), $("startPick"), oldBody.querySelector('[data-i18n="p.edgesLbl"]'), $("edgePick"), $("optFrame").closest(".swRow"),
-      sec("k.font"), fonts, $("txtCol").previousElementSibling, $("txtCol"), ghostRow, $("ghostOpts"));
-    side.append(ctl, more); gest.append(side, pv);
+      ghostRow, $("ghostOpts"));
+    const size = $("mkSize");
+    txtMore.append(label(mk("summary"), "k.more"), sec("k.font"), fonts, $("txtCol").previousElementSibling, $("txtCol"),
+      $("mkPos").previousElementSibling, $("mkPos"),
+      size.previousElementSibling, size, size.nextElementSibling);
+    // Grösse: die stehende Vorschau geht schon beim Ziehen mit (App zeichnet erst bei "change" neu)
+    size.addEventListener("input", () => rebuild(true));
+    top.append(gL, gT, label(mk("p", "muted mkNote"), "k.greetNote"), txtMore);
+    side.append(ctl, more); gest.append(top, side, pv);
     oldBody.before(gest); oldBody.classList.add("kOff");
+    // Vorschau steht zuerst still: fertiges Bild mit Schriftzug, ohne Teile. ▶ startet die Animation,
+    // jede Änderung (Gruss, Schrift, Farbe, Teile, Form …) springt wieder auf das stehende Bild (Roger 25.11.2026)
+    let stillOn = false;
+    const bigPlay = mk("button", "kPlayBig"); bigPlay.type = "button"; label(bigPlay, "p.play");
+    bigPlay.onclick = () => { if (!playing) $("pPlay").click(); };
+    $("pWrap").append(bigPlay);
+    const still = () => {
+      if (!P.cfg) return;
+      stillOn = true; P.draw(Math.max(P.cfg.T, (P.done || 0) + 8)); P.t = 0;
+      syncPlayer(); drawChart(); bigPlay.hidden = false;
+    };
+    const live = () => { stillOn = false; bigPlay.hidden = true; };
+    $("pPlay").addEventListener("click", live, true);
+    $("pScrub").addEventListener("input", live, true);
+    const onP3 = () => flow() && shown.includes("P3");
+    const wrapRebuild = window.rebuild;
+    window.rebuild = function (keepT) {
+      if (!onP3()) return wrapRebuild(keepT);
+      pausePreview(); const r = wrapRebuild(false); still(); return r;
+    };
+    const engineResize = P.resize.bind(P);
+    P.resize = () => { engineResize(); if (stillOn && onP3()) still(); };
     const enterP3 = ENTER.P3;
     ENTER.P3 = () => {
       enterP3(); st.visited.P4 = true; gT.value = (st.T.text && st.T.text.text) || ""; drawTextPanel();
-      requestAnimationFrame(() => { if (!P.cfg) return; P.resize(); if (!playing) { P.t = 0; $("pPlay").click(); } });
+      requestAnimationFrame(() => { if (!P.cfg) return; pausePreview(); P.resize(); still(); });
     };
     LEAVE.P3 = () => pausePreview();
     addEventListener("resize", () => { if (P.cfg && shown.includes("P3")) P.resize(); });
@@ -424,7 +376,7 @@
       const has = !!st.img, up = $("uploadBtn");
       label(up, has ? "k.otherPhoto" : "k.pickPhoto"); up.classList.toggle("primary", !has);
       cropBtn.classList.toggle("kOff", !has);
-      readyP.textContent = st.link && st.link.expires_at ? t("k.validUntil", { date: fmtDate(st.link.expires_at * 1000) }) : "";
+      readyP.textContent = st.link && st.link.expires_at ? t("k.validUntil", { date: fmtDay(st.link.expires_at * 1000) }) : "";
       if (st.id !== savedFor) { savedFor = st.id; sBox.checked = false; ask.classList.add("kOff"); }
       drawProg();
     };

@@ -26,7 +26,6 @@ html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
 #crumbs .now { padding:2px 6px; font-weight:600; }
 
 /* Panel «Über», gleich wie in Face-Timelapse: Abschnitte mit Linie, Tabelle Beschriftung | Wert, Punkt grün/gelb/rot für Immich */
-.aboutName { margin:0; font-size:16px; font-weight:bold; }
 .paneSection { margin:18px 0 8px; padding-top:12px; border-top:1px solid var(--line); font-size:15px; }
 .aboutTable { border-collapse:collapse; font-size:14px; }
 .aboutTable th { text-align:left; font-weight:normal; color:var(--muted); padding:3px 16px 3px 0; vertical-align:top; }

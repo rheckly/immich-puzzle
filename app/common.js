@@ -72,7 +72,17 @@ function fitColumns(ids, width, track) {
 // Entscheid 43: danach die Abschnitte aus about.sections ([Titel-Schlüssel, Text-Schlüssel], z. B. Herkunft und Lizenz)
 // und zuunterst die Box «Changelog» mit «N Änderungen in M Versionen» und «>». Die Box erscheint nur, wenn
 // GET /api/changelog antwortet und die Seite about.onChangelog setzt (öffnet rechts das Panel mit <div id="changelogBody">).
-const about = { mode: "", app: null, appFailed: false, immich: { status: "checking" }, sections: [], changelog: null, onChangelog: null, changelogOpen: false };
+// Entscheid 99: nur direkte Laufzeit-Abhängigkeiten (pip, npm, apk im Dockerfile, Schriften); keine transitiven Pakete, kein Basis-Image, keine Sprach-Laufzeit, Lizenz aus den Paketdaten geprüft; Schriften: 9 × OFL, 4 × Apache (Lizenzdatei neben jeder Schrift in app/fonts/)
+const LICENSES = [
+  ["Puzzle", "AGPL-3.0"],
+  ["@napi-rs/canvas", "MIT"],
+  ["DejaVu Fonts", "Bitstream Vera"],
+  ["FFmpeg", "GPL-2.0-or-later"],
+  ["mutagen", "GPL-2.0-or-later"],
+  ["Pillow", "MIT-CMU"],
+  ["t:about.fonts", "OFL-1.1 · Apache-2.0"],
+];
+const about = { mode: "", app: null, appFailed: false, immich: { status: "checking" }, sections: [], family: null, changelog: null, onChangelog: null, changelogOpen: false };
 async function drawImmichStatus() {
   about.immich = { status: "checking" };
   drawAbout();
@@ -98,10 +108,11 @@ function drawAbout() {
     rows.forEach(([head, cell]) => { const tr = el("tr"); tr.append(el("th", "", head)); const td = el("td"); td.append(cell); tr.append(td); tb.append(tr); });
     const tab = el("table", "aboutTable"); tab.append(tb); return tab;
   };
-  const parts = [el("p", "aboutName", "Puzzle"), el("h3", "paneSection", t("about.version"))];
+  const parts = [el("h3", "paneSection", t("about.version"))];
   if (about.app) {
     const rows = [[t("about.version"), about.app.version]];
-    if (about.app.date) rows.push([t("about.built"), fmtDate(about.app.date)]);
+    const built = about.app.built || about.app.date;  // Entscheid 27: Datum und Uhrzeit, Zürcher Zeit (SERVER_TZ)
+    if (built) rows.push([t("about.built"), fmtDate(built, about.app.built ? { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: SERVER_TZ } : undefined)]);
     if (about.mode) rows.push([t("about.mode"), t(`about.mode.${about.mode}`)]);
     parts.push(table(rows));
   } else parts.push(el("p", "muted", about.appFailed ? t("about.noVersion") : t("src.loading")));
@@ -112,6 +123,19 @@ function drawAbout() {
     if (im.version) rows.push([t("about.version"), im.version.replace(/^v/, "")]);
     if (im.error) rows.push(["", el("span", "error", im.error)]);
     parts.push(el("h3", "paneSection", t("immich.title")), table(rows));
+    // Entscheid 65: unter Immich je aktivierter Dienst aus /api/family, Reihenfolge von dort; ohne Register nur Immich
+    const fam = about.family;
+    if (fam && fam.services.length) {
+      parts.push(el("h3", "paneSection", t("about.services")), table(fam.services.map(s => {
+        const own = s.id === fam.self, st = own ? "ok" : s.status;
+        const cell = el("span", "aboutSvc");
+        cell.append(el("span", `immichDot dot-${st === "ok" ? "connected" : st === "down" ? "error" : "off"}`));
+        cell.title = t(st === "ok" ? "about.svcOk" : st === "down" ? "about.svcDown" : "about.svcPending");
+        const ver = own && about.app ? about.app.version : s.version;
+        cell.append(ver || t(st === "down" ? "about.svcDown" : "about.svcPending"));
+        return [s.name, cell];
+      })));
+    }
     if (im.status === "error") {
       const p = el("p"), retry = el("button", "", t("immich.retry"));
       retry.type = "button";
@@ -119,6 +143,10 @@ function drawAbout() {
       p.append(retry); parts.push(p);
     }
   }
+  // Herkunft (Roger 25.11.2026): eigenes Projekt, kein Fork
+  parts.push(el("h3", "paneSection", t("about.origin")), table([[t("about.project"), t("about.original")]]));
+  // Entscheid 98: Lizenzen in jeder Marke gleich, erste Zeile die Marke (LICENSE), danach mitgelieferte Fremdkomponenten alphabetisch
+  parts.push(el("h3", "paneSection", t("about.licenses")), table(LICENSES.map(([name, lic]) => [name.startsWith("t:") ? t(name.slice(2)) : name, lic])));
   for (const [title, text] of about.sections) parts.push(el("h3", "paneSection", t(title)), el("p", "aboutText", t(text)));
   const log = about.changelog;
   if (log && log.releases.length && about.onChangelog) {
@@ -139,7 +167,7 @@ function drawAbout() {
 onLang(drawAbout);
 
 // ---------- Panel «Einstellungen» ----------
-// Puzzle: die Live-Links stehen nicht unter «Über» (wie Collage), sondern als erster Abschnitt der Einstellungen.
+// Puzzle: die Live-Links stehen nicht unter «Über» (wie Collage), sondern in den Einstellungen nach «Erstellt mit» (Entscheid 76).
 // Braucht im Panel <div id="settingsBody">. about.share setzt die Seite aus GET /api/shares, Speichern über about.saveShareUrl
 function drawSettings() {
   const body = $("settingsBody");
@@ -150,7 +178,7 @@ function drawSettings() {
     rows.forEach(([head, cell]) => { const tr = el("tr"); tr.append(el("th", "", head)); const td = el("td"); td.append(cell); tr.append(td); tb.append(tr); });
     const tab = el("table", "aboutTable"); tab.append(tb); return tab;
   };
-  const parts = [el("h3", "paneSection first", t("about.share"))];
+  const parts = [el("h3", "paneSection", t("about.share"))];
   const s = about.share;
   if (!s) parts.push(el("p", "muted", t("src.loading")));
   else if (!s.enabled) parts.push(el("p", "muted", t("about.shareOff")));

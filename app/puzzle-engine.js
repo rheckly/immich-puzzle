@@ -298,7 +298,9 @@ function puzzleConfig(saved, img) {
   const src = motifSrc(cropImage(img, 0), saved), [cols, rows] = grid(saved.count, src.width / src.height);
   return { ...saved, src, cols, rows };
 }
-// Musik leise werden lassen in den letzten Sekunden («Ausblenden am Ende»)
+// Wann die Musik aufhört: mit dem Puzzle (T) oder, mit «Musik nach dem Puzzle weiterlaufen lassen», am Ende des Stücks
+function musicEnd(T, dur, tail) { return tail && dur > T ? dur : T; }
+// Musik leise werden lassen in den letzten Sekunden («Ausblenden am Ende»); T = Ende der Musik
 function musicVolume(t, T, vol, fade) {
   if (!fade) return vol;
   const left = T - t;

@@ -17,6 +17,8 @@ optional.
 - Shared links on a separate port, with password, photo and video download, metadata, validity period and an
   on/off switch
 - Optional: MP4 video of a shared puzzle, rendered on your server without network access
+- Statistics built in: views, likes and downloads per day, the most viewed links, link settings and storage used
+  (no IP addresses stored)
 - Optional: kiosk mode for guests without an account, phone notifications via ntfy
 - English and German, light and dark
 
@@ -217,6 +219,14 @@ Puzzle belongs to a small family of Immich tools by the same author. With a shar
 `./family/state` (mounted at `/family-state`) lets all tools share the login lockout. If `family.json` lists no tool
 other than Puzzle, the **Something else** button stays hidden. `SHARES_API_KEY` lets a hub service list the shared
 links of all tools.
+
+### Statistics
+
+The **Statistics** box shows views and likes of the last 30 days; its panel adds periods (7 days to all), views and
+likes per day, views by weekday, link settings, storage used and the ten most viewed links. Views and downloads of
+shared links are counted without bots and messenger previews, once per visitor and half hour, by day in the
+server's time zone; only the counts are stored, never IP addresses. The same data is available as JSON at
+`/api/stats` (with the normal login).
 
 ### Statistics (Umami)
 

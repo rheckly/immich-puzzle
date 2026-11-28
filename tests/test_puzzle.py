@@ -317,7 +317,14 @@ class PuzzleServerTest(unittest.TestCase):
         self.assertNotIn("bbbbbbbbbbbb", json.dumps(stored))  # nur Hash
         status, res = self.call("GET", self.base + "/api/shares")
         self.assertEqual(next(s for s in res["shares"] if s["id"] == p["id"])["likes"], 1)
-        self.assertNotIn("likes", self.app._internal_entry(self.app.puzzles[p["id"]], "https://app"))  # nur in der App
+        entry = self.app._internal_entry(self.app.puzzles[p["id"]], "https://app")  # Shares-API (Entscheide 78, 79)
+        self.assertEqual(entry["likes"], 1)
+        self.assertEqual([d["likes"] for d in entry["likeDays"]], [2])  # gesetzte Likes, Zurücknehmen zieht nicht ab
+        self.assertNotIn("likers", json.dumps(entry))
+        log = [e for e in self.app.protocol_entries()["entries"] if e["what"] in ("likeOn", "likeOff")]  # Entscheid 78
+        self.assertEqual([e["what"] for e in log], ["likeOff", "likeOn", "likeOn"])
+        self.assertTrue(all(e["role"] == "visitor" and e.get("item") == "Ferien" for e in log))
+        self.assertNotIn("bbbbbbbbbbbb", json.dumps(log))  # keine Kennung im Protokoll
         self.app.patch_share(self.app.puzzles[p["id"]]["online_link"]["token"], {"active": False}, "https://app")
         self.assertEqual(self.call("POST", url + "like", {"on": True}, a)[0], 403)  # ausgeschaltet
 
@@ -594,6 +601,113 @@ class PuzzleServerTest(unittest.TestCase):
         self.assertEqual(status, 400)
 
 
+class ServerTimeZoneTest(unittest.TestCase):
+    """Entscheid 84: Die Seite bekommt die Zeitzone des Containers, damit Ablaufdaten in derselben Zone erscheinen."""
+
+    def test_tz_meta(self):
+        old = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "Europe/Zurich"
+            self.assertEqual(server.tz_meta(), '<meta name="tz" content="Europe/Zurich">')
+            os.environ["TZ"] = '"><script>'
+            self.assertEqual(server.tz_meta(), "")
+            os.environ.pop("TZ")
+            self.assertEqual(server.tz_meta(), "")
+        finally:
+            if old is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old
+
+
+class StatsTest(unittest.TestCase):
+    """Statistik (0.1.30, Entscheide 86-93): /api/stats nur mit Login; works, storage und Downloads in der Shares-API."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        data = os.path.join(cls.tmp, "data")
+        cls.app = server.App("", "", data, os.path.join(cls.tmp, "puzzles"), os.path.join(cls.tmp, "music"),
+                             share_port=1, share_public_url="https://links.example.com/puzzles")
+        cls.app.eager_photos = False  # Foto mit Schrift erst beim Download, nicht nebenher (sonst wechselt die Datei beim Lesen)
+        cls.auth = server.login.Auth("admin", "pw-test-123", data)
+        cls.http = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(cls.app, auth=cls.auth))
+        cls.share = ThreadingHTTPServer(("127.0.0.1", 0), server.make_share_handler(cls.app))
+        for s in (cls.http, cls.share):
+            threading.Thread(target=s.serve_forever, daemon=True).start()
+        cls.base = f"http://127.0.0.1:{cls.http.server_address[1]}"
+        cls.sbase = f"http://127.0.0.1:{cls.share.server_address[1]}"
+        cls.cookie = {"Cookie": f"{server.login.COOKIE}={cls.auth.make_cookie()}"}
+
+    @classmethod
+    def tearDownClass(cls):
+        for s in (cls.http, cls.share):
+            s.shutdown()
+            s.server_close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    call = PuzzleServerTest.call
+
+    def new_puzzle(self, name):
+        status, p = self.call("POST", self.base + "/api/puzzles", {"config": {"count": 24, "title": name}, "photo": photo_url(),
+                                                                   "name": name}, self.cookie)
+        self.assertEqual(status, 200, p)
+        return p
+
+    def test_stats_needs_login(self):
+        status, body = self.call("GET", self.base + "/api/stats")
+        self.assertEqual(status, 401)
+        self.assertIsInstance(body, dict)
+        status, body = self.call("GET", self.base + "/api/stats", headers=self.cookie)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["keep"], server.VIEW_DAYS)
+        self.assertEqual(body["today"], time.strftime("%Y-%m-%d"))
+        for key in ("works", "storage", "shares", "source", "version"):
+            self.assertIn(key, body)
+
+    def test_works_storage_downloads(self):
+        old = self.new_puzzle("Ohne Link")
+        p = self.new_puzzle("Mit Link")
+        status, p = self.call("POST", f"{self.base}/api/puzzles/{p['id']}/link", {"days": 30, "download": True}, self.cookie)
+        self.assertEqual(status, 200, p)
+        path = p["link"]["url"].split("links.example.com", 1)[1]
+        for _ in range(2):  # gleicher Besucher: zählt einmal
+            status, _ = self.call("GET", self.sbase + path + "download", raw=True)
+            self.assertEqual(status, 200)
+        status, _ = self.call("GET", self.sbase + path + "download", headers={"User-Agent": "WhatsApp/2.23"}, raw=True)
+        self.assertEqual(status, 200)  # Bot: geliefert, aber nicht gezählt
+        req = urllib.request.Request(self.sbase + path + "download", method="HEAD", headers={"User-Agent": "Mozilla/5.0 other"})
+        urllib.request.urlopen(req).close()  # HEAD zählt nicht
+        self.app._storage = None  # Zwischenspeicher leeren, sonst gilt der Stand vom ersten Test bis zu einer Stunde
+        status, body = self.call("GET", self.base + "/api/stats", headers=self.cookie)
+        self.assertEqual(status, 200, body)
+        ids = [w["id"] for w in body["works"]]
+        self.assertLess(ids.index(p["id"]), ids.index(old["id"]))  # neueste zuerst, auch ohne Link
+        work = body["works"][ids.index(p["id"])]
+        self.assertEqual(work["title"], "Mit Link")
+        self.assertFalse(work["video"])
+        self.assertGreater(work["bytes"], 0)
+        self.assertTrue(work["created"].endswith("Z"))
+        share = next(s for s in body["shares"] if s["work"] == p["id"])
+        self.assertEqual(share["downloads"], 1)
+        self.assertEqual(share["downloadDays"], [{"date": time.strftime("%Y-%m-%d"), "downloads": 1}])
+        st = body["storage"]
+        self.assertEqual(set(st), {"bytes", "files", "measured"})
+        self.assertGreaterEqual(st["bytes"], sum(w.get("bytes", 0) for w in body["works"]))
+        self.assertGreater(st["files"], 0)
+        self.assertNotIn(self.tmp.replace("\\", "/"), json.dumps(body).replace("\\\\", "/"))  # keine Pfade
+        # Zwischenspeicher: eine neue Datei zählt erst nach einer Stunde (oder fresh)
+        with open(os.path.join(self.tmp, "data", "extra.bin"), "wb") as f:
+            f.write(b"x" * 5000)
+        self.assertEqual(self.app.storage_scan()[0]["bytes"], st["bytes"])
+        self.assertEqual(self.app.storage_scan(fresh=True)[0]["bytes"], st["bytes"] + 5000)
+        # Weiterer Besucher nach Ablauf des Fensters zählt wieder, gespeichert ohne IP
+        self.assertTrue(self.app.count_download(p["id"], "10.0.0.9", "Mozilla/5.0", now=time.time() + server.VIEW_WINDOW + 1))
+        link = self.app.puzzles[p["id"]]["online_link"]
+        self.assertEqual(link["downloads"], 2)
+        self.assertNotIn("10.0.0.9", json.dumps(link))
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -636,3 +750,4 @@ class WithoutImmichTest(unittest.TestCase):
         self.assertIsNone(got["meta"])
         status, data = self.call("GET", self.base + f"/api/puzzles/{p['id']}/photo.jpg", raw=True)
         self.assertEqual(status, 200)
+

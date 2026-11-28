@@ -651,6 +651,13 @@ def mode_tags(kind):
 
 
 KIOSK_FILES = ("kiosk.js", "kiosk.css", "kiosk-admin.js")
+# Suchmaschinen (Checkliste öffentliche Website): Startseite und Datenschutz sind öffentlich, alles Persönliche nicht.
+# Englisch, weil die Seite ohne gespeicherte Wahl die Sprache des Browsers nimmt (Googlebot: Englisch); kiosk.js
+# setzt den Titel danach in der gewählten Sprache. Eine URL für beide Sprachen, darum kein hreflang.
+SEO_TITLE = "Puzzle · Turn your photo into a puzzle"
+SEO_DESCRIPTION = ("Upload a photo, add music and a greeting, and watch it put itself back together as a puzzle. "
+                   "Share it by link or QR code, no account needed.")
+PRIVACY_DESCRIPTION = "Datenschutz beim Puzzle: was von deinem Foto gespeichert wird, keine Namen und keine IP-Adressen, und wann alles gelöscht wird."
 
 
 def make_guest_handler(app):
@@ -682,9 +689,31 @@ def make_guest_handler(app):
         def _strict_page(self):
             return True
 
+        def _title(self):
+            return SEO_TITLE
+
         def _head_tags(self):
+            # Bearbeitungslinks (/edit/<id>) sind persönlich: nicht indexieren; die Startseite mit Beschreibung und canonical
+            if self.path.split("?")[0].rstrip("/") == "":
+                seo = (f'<meta name="description" content="{html.escape(SEO_DESCRIPTION)}">'
+                       f'<link rel="canonical" href="{html.escape(self._base())}/">')
+            else:
+                seo = '<meta name="robots" content="noindex, nofollow">'
             # Seite verborgen, bis kiosk.js den Status kennt (sonst blitzt bei Pause die App auf)
-            return '<script>document.documentElement.classList.add("kWait")</script><style>html.kWait body{visibility:hidden}</style>'
+            return seo + '<script>document.documentElement.classList.add("kWait")</script><style>html.kWait body{visibility:hidden}</style>'
+
+        def _robots(self):
+            lines = ["User-agent: *", "Allow: /", "Disallow: /edit/", "Disallow: /api/", "Disallow: /login", "Disallow: /admin"]
+            if app.share_prefix and app.share_prefix != "/":
+                lines.append(f"Disallow: {app.share_prefix}/")  # Spiel-Links, falls sie über denselben Host laufen
+            lines.append(f"Sitemap: {self._base()}/sitemap.xml")
+            self._send(200, ("\n".join(lines) + "\n").encode(), "text/plain; charset=utf-8")
+
+        def _sitemap(self):
+            base = html.escape(self._base())
+            urls = "".join(f"<url><loc>{base}{p}</loc></url>" for p in ("/", "/datenschutz"))
+            page = f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n'
+            self._send(200, page.encode(), "application/xml; charset=utf-8")
 
         def _get(self, parts):
             if parts in (["health"], ["favicon.svg"], ["favicon.ico"]) or parts[:1] in (["brand"], ["fonts"]):
@@ -693,12 +722,16 @@ def make_guest_handler(app):
                 super()._get([""])
             elif parts in (["datenschutz"], ["privacy"]):
                 self._privacy()
-            elif parts in (["common.css"], ["common.js"], ["profile.js"], ["i18n.js"], ["puzzle-engine.js"], ["kiosk.js"], ["kiosk.css"]) \
+            elif parts == ["robots.txt"]:
+                self._robots()
+            elif parts == ["sitemap.xml"]:
+                self._sitemap()
+            elif parts in (["common.css"], ["common.js"], ["profile.js"], ["i18n.js"], ["puzzle-engine.js"], ["qr.js"], ["kiosk.js"], ["kiosk.css"]) \
                     or (len(parts) == 1 and parts[0] in core.text_files()):
                 self._script(parts[0])
             elif parts == ["api", "version"]:
                 day, month, year = core.VERSION_DATE.split(".")
-                self._json({"version": core.VERSION, "date": f"{year}-{month}-{day}", "immich": False, "kiosk": True})
+                self._json({"version": core.VERSION, "date": f"{year}-{month}-{day}", "built": core.BUILT, "immich": False, "kiosk": True})
             elif parts == ["api", "auth", "session"]:
                 self._json({"enabled": False, "user": None, "name": None})
             elif parts == ["api", "family"]:
@@ -786,6 +819,8 @@ def make_guest_handler(app):
                 paras += f'<h2>Kontakt</h2><p>{html.escape(contact)}</p>'
             page = (f'<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">'
                     f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>Datenschutz · Puzzle</title>'
+                    f'<meta name="description" content="{html.escape(PRIVACY_DESCRIPTION)}">'
+                    f'<link rel="canonical" href="{html.escape(self._base())}/datenschutz">'
                     f'<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/common.css?v={core.VERSION}">'
                     f'<link rel="stylesheet" href="/kiosk.css?v={core.VERSION}"></head>'
                     f'<body class="kPrivacy"><main><p><a href="/">‹ Zurück zum Puzzle</a></p><h1>Datenschutz</h1>{paras}</main></body></html>')
@@ -809,6 +844,8 @@ def make_admin_handler(app, auth):
                 self._json(app.admin_view())
             elif parts == ["api", "family"]:
                 self._json({"self": None, "services": [], "openMode": "tab"})
+            elif parts[:2] == ["api", "collages"]:  # Collage als Motiv nicht im Kiosk (Roger 25.11.2026)
+                raise KeyError(self.path)
             else:
                 super()._get(parts)
 

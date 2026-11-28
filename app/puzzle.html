@@ -29,8 +29,9 @@ button { font:inherit; padding:7px 13px; border-radius:5px; border:1px solid var
 button.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:600; }
 button.danger { color:var(--err); }
 button:disabled { opacity:.5; cursor:default; }
-input[type=text], input[type=password], input[type=search], input[type=date], select, textarea { width:100%; padding:6px 8px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:5px; font:inherit; }
+input[type=text], input[type=password], input[type=search], input[type=url], input[type=date], select, textarea { width:100%; padding:6px 8px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:5px; font:inherit; }
 textarea { resize:vertical; }
+input[type=color] { background:var(--bg); border:1px solid var(--line); border-radius:5px; }  /* Entscheid 94; .mkCustom input bleibt unsichtbar (später, gleiche Spezifität) */
 select, input[type=date] { min-height:2.3em; }
 label.lbl { display:block; margin:8px 0 3px; font-size:13px; color:var(--muted); }
 /* D2: Gültig-bis-Datum unter der Auswahl; berechnet = gesperrt, aber gut lesbar */
@@ -64,7 +65,6 @@ section.box:has(> .boxHead > .paneBtn), .clBox:has(> .clBoxHead > .paneBtn), .sh
   .clBox:has(> .clBoxHead > .paneBtn):hover .clBoxHead h3 { color:var(--accent); }
 }
 .boxTitle { margin:0 0 8px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:6px; }
-.boxTitle .tick { display:none !important; }  /* Häkchen links entfernt, Stand zeigt die Pfeilkette in der Vorschau (0.1.4) */
 .boxTitle .num { display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%; background:var(--bg); border:1px solid var(--line); font-size:12px; }
 .boxTitle .grow { flex:1; }
 .paneHead { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
@@ -173,6 +173,9 @@ input[type=range] { width:100%; accent-color:var(--accent); }
 #chart { width:100%; height:64px; display:block; background:var(--bg); border:1px solid var(--line); border-radius:5px; }
 
 /* Teilen */
+/* QR-Code des Links (Entscheid 80): weiss, 180 px, Ruhezone 4 Module; abgelaufen oder aus grau */
+.qrBlock { margin:6px 0 4px; } .qrImg { width:180px; height:180px; background:#fff; border-radius:6px; overflow:hidden; } .qrImg:empty { display:none; }
+.qrImg svg { display:block; width:180px; height:180px; } .qrBlock.off .qrImg { opacity:.35; filter:grayscale(1); } .qrNote { margin:6px 0 0; }
 .linkRow { display:flex; align-items:center; gap:6px; margin:10px 0 4px; font-size:13px; }
 .linkRow code { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:5px 8px; background:var(--bg); border:1px solid var(--line); border-radius:5px; }
 .ogCard { display:flex; gap:10px; margin-top:10px; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--bg); font-size:13px; }
@@ -244,6 +247,9 @@ main { display:flex; gap:16px; align-items:flex-start; padding:16px 20px 32px; o
 .mkAlb tr.sel .mkGo { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
 .mkGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
 .mkGrid img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px; cursor:pointer; }
+.colBig { background:var(--bg); border-radius:5px; margin:0 0 10px; display:flex; justify-content:center; }
+.colBig img { max-width:100%; max-height:60vh; object-fit:contain; display:block; }
+#colNew { margin:0; padding:1px 10px; }
 .mkGrid img.on { outline:3px solid var(--accent); outline-offset:-3px; }
 @media (max-width:860px) { .mkGrid { grid-template-columns:repeat(3,1fr); } }
 /* Bühne wie Mockup «Geteilte Links»: Startspalte links, offene Panels rechts daneben */
@@ -252,7 +258,8 @@ main > .left { flex:0 0 clamp(300px,32vw,380px); }
 .mkP { display:none; }
 .mkP.on { display:flex; flex-direction:column; flex:0 0 480px; width:480px; position:static; overflow:auto;
   height:calc(100vh - var(--barH, 90px) - 40px); height:calc(100dvh - var(--barH, 90px) - 40px); overflow-x:hidden; }  /* bildschirmhoch (0.1.4); nicht seitlich verschiebbar, sonst wackelt es auf dem iPhone (0.1.8, wie Smart Albums 1.0.124) */
-#previewPane.on, #welcomePane.on { flex-basis:620px; width:620px; }
+#previewPane.on { flex-basis:620px; width:620px; }
+#welcomePane.on { flex-basis:680px; width:680px; }  /* 680 = fünf Kacheln à 120 px + 4 × 10 px Abstand + Rand des Panels (Entscheid 81) */
 /* Vorschau füllt auf dem Computer die Restbreite; Bühne so gross, dass alles ohne Scrollen ins Panel passt (Roger 21.11.2026, 0.1.4) */
 #previewPane.on { flex:1 0 620px; width:auto; }
 /* Panels laufen beim Scrollen mit und stehen am Schluss unten bündig mit der Startspalte, wie Collage (Roger 21.11.2026, 0.1.4) */
@@ -266,11 +273,14 @@ main > .left { flex:0 0 clamp(300px,32vw,380px); }
 .hmSteps { display:grid; grid-template-columns:1fr; gap:10px; }
 .hmStep { border:1px solid var(--line); border-radius:8px; padding:12px 14px; display:flex; gap:12px; } .hmStep p { margin:2px 0 0; font-size:14px; }
 .hmStep .n { flex:none; width:28px; height:28px; border-radius:50%; background:color-mix(in srgb, var(--accent) 15%, transparent); color:var(--accent); display:grid; place-items:center; font-weight:700; }
-.hmTiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:10px; }
+.hmTiles { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:10px; }  /* fünf gleich breite Kacheln in einer Zeile (Entscheid 81) */
 button.hmTile { margin:0; display:flex; flex-direction:column; align-items:flex-start; text-align:left; padding:10px 12px; border-radius:8px; }
 button.hmTile:hover { border-color:var(--accent); } .hmTile .v { font-size:22px; font-weight:700; } .hmTile .l { color:var(--muted); font-size:13px; }
+@media (max-width:520px) { .hmTiles { gap:6px; } button.hmTile { padding:8px; } .hmTile .v { font-size:18px; } .hmTile .l { font-size:12px; max-width:100%; -webkit-hyphens:auto; hyphens:auto; overflow-wrap:break-word; } }
 ul.hmLog { list-style:none; margin:0; padding:0; } ul.hmLog li { padding:6px 0; border-bottom:1px solid var(--line); display:flex; gap:12px; }
 ul.hmLog .t { color:var(--muted); flex:none; min-width:130px; font-size:14px; }
+ul.hmLog li.hmOpen { padding:0; } ul.hmLog .hmOpen button { display:flex; gap:12px; width:100%; margin:0; padding:6px 4px; height:auto; border:0; border-radius:0; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+@media (hover:hover) { ul.hmLog .hmOpen button:hover { background:color-mix(in srgb, var(--accent) 8%, transparent); } }  /* Zeilen öffnen ihr Werk (Entscheid 68) */
 .hmFoot { margin-top:20px; }
 .hmStart { margin:10px 0 0; width:100%; height:auto; text-align:left; font:inherit; color:inherit; background:color-mix(in srgb, var(--accent) 8%, transparent); border-color:var(--accent); cursor:pointer; }
 .hmStart:hover { background:color-mix(in srgb, var(--accent) 15%, transparent); } .hmStart .n { background:var(--accent); color:#fff; }  /* E4: von der Willkommensseite direkt zur Motivwahl */
@@ -352,17 +362,17 @@ body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Start
 /* P8 Ablauf (Roger 21.11.2026) */
 .mkProg { margin:0 0 12px; } .mkProg > .muted { display:block; font-size:12px; margin:0 0 6px; }
 /* Ablauf als Pfeilkette auf einer Zeile: grün erledigt, rot offen (Roger 21.11.2026, 0.1.4) */
-.mkProg { --pzDone:#3f9a2f; --pzOpen:#c00000; --pzTip:10px; }
+.mkProg { --pzTip:10px; }  /* Farben aus den Tokens, offen neutral statt rot (Entscheid 72, 0.1.28) */
 .mkProg ol { list-style:none; margin:0; padding:0; display:flex; flex-wrap:nowrap; }
 .mkProg li { flex:1 1 0; min-width:0; } .mkProg li + li { margin-left:calc(3px - var(--pzTip)); }
 .mkProg button { width:100%; height:44px; margin:0; border:0; border-radius:0; padding:0 5px 0 calc(var(--pzTip) + 3px);
-  background:var(--pzOpen); color:#fff; font-size:11.5px; font-weight:600; line-height:1.15; text-align:center; hyphens:auto;
+  background:var(--line); color:var(--text); font-size:11.5px; font-weight:600; line-height:1.15; text-align:center; hyphens:auto;
   clip-path:polygon(0 0, calc(100% - var(--pzTip)) 0, 100% 50%, calc(100% - var(--pzTip)) 100%, 0 100%, var(--pzTip) 50%); }
 .mkProg li:first-child button { padding-left:8px; clip-path:polygon(0 0, calc(100% - var(--pzTip)) 0, 100% 50%, calc(100% - var(--pzTip)) 100%, 0 100%); }
 .mkProg button span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.mkProg .done button { background:var(--pzDone); }
-.mkProg .next button { text-decoration:underline; text-underline-offset:3px; }
-.mkProg .std button { background:#8a8f94; }  /* beim Standard gelassen: grau statt rot (Roger 22.11.2026, 0.1.8) */
+.mkProg .done button, .mkProg .std button { background:var(--ok); color:var(--on-accent); }
+.mkProg .next button { background:var(--accent); color:var(--on-accent); }
+.mkProg .std small { opacity:.85; }  /* beim Standard gelassen zählt als erledigt (B5), mit Zusatz «Standard» */
 .mkProg button small { display:block; font-size:10px; font-weight:400; opacity:.9; }
 .mkStepPick { display:flex; flex-direction:column; gap:6px; margin:0 0 12px; }
 .mkStepPick label { display:flex; gap:8px; align-items:flex-start; cursor:pointer; }
@@ -381,6 +391,10 @@ body:not(.deep) #previewPane > .doneRow { display:none; }  /* Vorschau als Start
 /* P5 Schriftzug (Roger 21.11.2026) */
 .mkTxtPrev { position:relative; aspect-ratio:3896/2754; max-height:240px; margin:0 auto; border-radius:6px; overflow:hidden; background:#111; }
 .mkTxtPrev canvas { width:100%; height:100%; display:block; }
+/* Klick auf die Vorschau: gross über dem ganzen Fenster, Klick oder Esc legt sie zurück (Roger 24.11.2026) */
+.mkTxtPrev { cursor:zoom-in; }
+.txZoom { position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center; padding:3vmin; cursor:zoom-out; }
+.txZoom .mkTxtPrev { width:min(100%, calc((100vh - 6vmin) * var(--ar, 1.41))); max-height:none; margin:0; cursor:zoom-out; box-shadow:0 10px 40px rgba(0,0,0,.5); }
 .mkTxtBox { position:absolute; inset:0; display:flex; padding:6%; pointer-events:none; }
 .mkTxtBox span { line-height:1.15; max-width:100%; overflow-wrap:anywhere; }
 .mkTxtBox.pos-tl, .mkTxtBox.pos-tc, .mkTxtBox.pos-tr { align-items:flex-start; }
@@ -439,7 +453,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
 .famIcon { width:32px; height:32px; flex:none; display:grid; place-items:center; }
 .famLetter { width:32px; height:32px; display:grid; place-items:center; border-radius:6px; background:var(--accent); color:var(--on-accent); font-weight:600; }
 .famText { flex:1; min-width:0; } .famText strong { display:block; font-weight:600; overflow-wrap:anywhere; }
-.famSub { display:block; color:var(--muted); font-size:13px; } .famHere { flex:none; color:var(--muted); font-size:12px; } .famGo { color:var(--muted); font-size:18px; }
+.famSub { display:block; color:var(--muted); font-size:13px; } .famVer { margin-left:6px; color:var(--muted); font-size:12px; font-weight:400; font-variant-numeric:tabular-nums; } .famHere { flex:none; color:var(--muted); font-size:12px; } .famGo { color:var(--muted); font-size:18px; }
 #histSearch { width:100%; margin:0 0 10px; }
 .histList { display:grid; gap:8px; }
 .hist { display:flex; gap:10px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:5px; }
@@ -448,6 +462,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
 .hist button.open { flex:1; min-width:0; text-align:left; border:0; background:none; padding:0; height:auto; margin:0; color:inherit; }
 .hist strong, .hist .histSub { display:block; overflow-wrap:anywhere; } .hist strong { font-weight:600; } .hist .histSub { color:var(--muted); font-size:13px; }
 .hist .danger { margin:0; }
+@media (hover:hover) { #colList .hist { cursor:pointer; } #colList .hist:not(.on):hover { border-color:color-mix(in srgb, var(--accent) 55%, var(--line)); } }  /* Hover wie bei den Boxen (0.1.26) */
 .mkPlayer { position:relative; line-height:0; background:#111; border-radius:4px; overflow:hidden; }
 .mkPlayer img { width:100%; display:block; }
 .mkPlay { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:56px; height:56px; margin:0; padding:0 0 0 4px; border-radius:50%;
@@ -461,6 +476,58 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
 .mkFacts dt { color:var(--muted); } .mkFacts dd { margin:0; overflow-wrap:anywhere; }
 .mkOk { color:var(--accent); font-weight:600; }
 @media (max-width:860px) { main > .mkP.on, #previewPane.on, #welcomePane.on { flex:none; height:auto; } }  /* in der Spalte keine feste Höhe */
+@media (max-width:860px) { #welcomePane.on { width:100%; } }  /* Handy: volle Breite statt 680 px, die Kacheln werden kleiner (Entscheid 81) */
+/* Statistik (0.1.30, Entscheide 86–93, 95): Vorlage Smart-Album (#stats), eine Marke, alles in --accent, Likes #ff5a6e.
+   Das Panel füllt die Restbreite; Spalten richten sich nach der Breite des Panels (Container), nicht des Fensters. */
+#sxPane.on { flex:1 0 680px; width:auto; container-type:inline-size; }
+#sxPane { --sxGrid:color-mix(in srgb, var(--line) 60%, transparent); --sxLike:#ff5a6e; }
+#sxPane .sxFilt { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--line); }
+#sxPane .sxFilt label { color:var(--muted); font-size:13px; display:flex; gap:6px; align-items:center; }
+#sxPane .sxFilt input[type=date] { width:auto; }
+#sxPane .sxSeg { display:inline-flex; flex-wrap:wrap; gap:4px; }
+#sxPane .sxSeg button { padding:5px 11px; }
+#sxPane .sxSeg button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+.sxDot { width:10px; height:10px; border-radius:50%; flex:none; display:inline-block; }
+#sxPane h4 { margin:18px 0 8px; font-size:14px; } #sxPane h4 small { font-weight:400; color:var(--muted); margin-left:6px; }
+#sxPane .sxTiles { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+#sxPane .sxTile { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:var(--card); min-width:0; }
+#sxPane .sxTile .v { font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; display:block; }
+#sxPane .sxTile .l { color:var(--muted); font-size:13px; display:block; hyphens:auto; overflow-wrap:break-word; }
+#sxPane .sxTile .d { font-size:12px; color:var(--muted); display:block; margin-top:2px; }
+#sxPane .sxTile .d.up { color:var(--ok); } #sxPane .sxTile .d.dn { color:var(--err); } #sxPane .sxTile svg { display:block; margin-top:6px; }
+#sxPane .sxGrid { display:grid; grid-template-columns:2fr 1fr; gap:14px; margin-top:14px; }
+#sxPane .sxCard { border:1px solid var(--line); border-radius:8px; padding:10px 12px 8px; min-width:0; background:var(--card); }
+#sxPane .sxCard h4 { margin:0 0 6px; }
+#sxPane .sxLeg { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:12px; color:var(--muted); margin-bottom:4px; } #sxPane .sxLeg span { display:inline-flex; gap:5px; align-items:center; }
+#sxPane .sxChart { position:relative; } #sxPane .sxChart svg { display:block; width:100%; overflow:visible; }
+#sxPane .ax { fill:var(--muted); font-size:11px; }
+.sxTip { position:fixed; pointer-events:none; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.15); z-index:60; display:none; min-width:130px; }
+.sxTip b { display:block; margin-bottom:3px; } .sxTip .r { display:flex; justify-content:space-between; gap:12px; align-items:center; } .sxTip .r span:first-child { display:inline-flex; gap:5px; align-items:center; }
+#sxPane table { border-collapse:collapse; width:100%; font-size:13px; }
+#sxPane th, #sxPane td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+#sxPane th { color:var(--muted); font-weight:500; }
+#sxPane .num { text-align:right; font-variant-numeric:tabular-nums; }
+#sxPane td .bar { display:inline-block; height:8px; border-radius:0 4px 4px 0; vertical-align:middle; margin-left:6px; background:var(--accent); }
+#sxPane td.lnk { max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+#sxPane tbody tr:hover { background:color-mix(in srgb, var(--accent) 7%, transparent); }
+#sxPane .sxMeters { display:grid; gap:9px; }
+#sxPane .sxMeter .top { display:flex; justify-content:space-between; gap:8px; font-size:13px; } #sxPane .sxMeter .top span:last-child { color:var(--muted); font-variant-numeric:tabular-nums; text-align:right; }
+#sxPane .trk { height:8px; border-radius:4px; background:var(--sxGrid); overflow:hidden; } #sxPane .sxMeter .trk { margin-top:3px; }
+#sxPane .fill { display:block; height:100%; background:var(--accent); border-radius:0 4px 4px 0; }
+#sxPane .sxStor { display:grid; grid-template-columns:220px 1fr; gap:16px; align-items:start; }
+#sxPane .sxStor .big { font-size:26px; font-weight:600; font-variant-numeric:tabular-nums; }
+#sxPane .srow { display:grid; grid-template-columns:minmax(0,1.3fr) 2fr auto; gap:8px; align-items:center; font-size:13px; padding:3px 0; }
+#sxPane .srow .n { color:var(--muted); font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+#sxPane .srow .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#sxPane .sxScroll { overflow-x:auto; }
+#sxPane .sxFoot { color:var(--muted); font-size:12px; margin-top:14px; }
+#sxPane .sxEmpty { color:var(--muted); font-size:13px; padding:30px 0; text-align:center; }
+#sxPane .thS { background:none; border:0; padding:0; color:inherit; font:inherit; cursor:pointer; white-space:nowrap; min-height:0; } #sxPane .thS:hover { text-decoration:underline; }
+#sxPane .thA { display:inline-block; min-width:1em; font-size:10px; margin-left:2px; }
+@container (max-width:900px) { #sxPane .sxGrid { grid-template-columns:1fr; } #sxPane .sxTiles { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width:860px) { #sxPane.on { flex:none; width:auto; } }
+@media (max-width:520px) { #sxPane .sxTiles { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; } #sxPane .sxTile { padding:8px; } #sxPane .sxTile .v { font-size:19px; }
+  #sxPane .sxGrid { grid-template-columns:1fr; } #sxPane .sxStor { grid-template-columns:1fr; gap:6px; } #sxPane .hide-s { display:none; } }
 </style>
 </head>
 <body>
@@ -470,7 +537,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
   <span id="profile" data-letter="P" data-service="Puzzle"></span>
 </header>
 <main>
-  <div class="left">
+  <div class="left" id="left">
     <section class="box" id="kindBox">
       <h2 class="boxTitle" data-i18n="p.kindHead">Was möchtest du heute erstellen?</h2>
       <div class="btnRow"><button id="newBtn" type="button" class="primary" title="Alles auf den Anfang setzen. Das geöffnete Puzzle bleibt unter Bisherige Puzzles erhalten." data-i18n-title="p.newTitle" data-i18n="p.new">Neues Puzzle</button><button id="familyBtn" type="button" class="hidden" data-go="P21" title="Die anderen Immich-Dienste der Familie" data-i18n-title="family.openTitle" data-i18n="family.open">Etwas anderes</button></div>
@@ -534,8 +601,12 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <p class="muted" data-i18n="settings.sum">Adresse der Live-Links</p>
     </section>
     <section class="box">
+      <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="sx.title">Statistik</h2><button type="button" class="paneBtn" data-go="P34" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Statistik rechts öffnen" data-i18n-aria-label="sx.open">&gt;</button></div>
+      <p class="muted" id="sxSum" data-i18n="sx.sumDef">Aufrufe, Likes und Speicher</p>
+    </section>
+    <section class="box">
       <div class="boxHead"><h2 class="boxTitle fixed" data-i18n="about.title">Über</h2><button type="button" class="paneBtn" data-go="P12" title="Rechts öffnen" data-i18n-title="pane.openRight" aria-label="Über rechts öffnen" data-i18n-aria-label="about.open">&gt;</button></div>
-      <p class="muted" data-i18n="about.sum">Version dieser App und Verbindung zu Immich</p>
+      <p class="muted" id="aboutSum" data-i18n="about.sum">Version dieser App und Verbindung zu Immich</p>
     </section>
   </div>
 
@@ -554,6 +625,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <button type="button" class="hmTile" data-go="P22"><span class="v" id="hmTPz">0</span><span class="l" data-i18n="u.tPuzzles">Puzzles</span></button>
       <button type="button" class="hmTile" data-go="P9"><span class="v" id="hmTLinks">0</span><span class="l" data-i18n="u.tLinks">aktive Links</span></button>
       <button type="button" class="hmTile" id="hmViews" data-go="P29"><span class="v" id="hmTViews">0</span><span class="l" data-i18n="u.tViews">Aufrufe</span></button>
+      <button type="button" class="hmTile" data-go="P9"><span class="v" id="hmTLikes">0</span><span class="l" data-i18n="u.tLikes">♥ Likes</span></button>
       <button type="button" class="hmTile" data-go="P26"><span class="v" id="hmTMusic">0</span><span class="l" data-i18n="u.tMusic">eigene Musik</span></button>
     </div>
     <h4 data-i18n="u.recent">Zuletzt</h4>
@@ -592,7 +664,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
   <aside class="pane mkP" id="sideMotif" data-pno="P2">
     <div class="paneHead"><h2 class="boxTitle"><span class="num">2</span><span data-i18n="u.motifPick">Motiv auswählen</span> <span class="tick hidden" data-tick="motif">✓</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
     <div class="mkBody" id="motifBody">
-      <div class="btnRow mkEven mkSrc"><button type="button" id="uploadBtn" data-i18n="u.upload">Hochladen</button><button type="button" class="primary" id="imBtn" data-go="P24" data-i18n="u.fromImmich">Aus Immich</button></div>
+      <div class="btnRow mkEven mkSrc"><button type="button" id="uploadBtn" data-i18n="u.upload">Hochladen</button><button type="button" class="primary" id="imBtn" data-go="P24" data-i18n="u.fromImmich">Aus Immich</button><button type="button" class="hidden" id="colBtn" data-go="P32" data-i18n="u.fromCollage">Aus Collage</button></div>
       <input type="file" id="file" accept="image/*" class="hidden">
       <p class="muted mkNote" id="mkNote" data-i18n="u.motifNote"></p>
       <div id="mkDirect">
@@ -622,6 +694,23 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
     <div class="btnRow doneRow"><button type="button" data-go="CLOSE" data-i18n="u.cancel">Abbrechen</button><button type="button" class="primary" id="albUse" disabled data-i18n="u.useMotif">Als Motiv übernehmen</button></div>
   </aside>
 
+  <!-- P32 Collage wählen (Entscheid 66): fertige Collagen aus Collage, «+ Collage» öffnet Collage in einem neuen Tab -->
+  <aside class="pane mkP" id="sideCollages" data-pno="P32">
+    <div class="paneHead"><h2 data-i18n="u.colPick">Collage wählen</h2><button type="button" id="colNew" class="hidden" data-i18n="u.colNew" data-i18n-title="u.colNewT">+ Collage</button><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <input type="search" class="mkFind hidden" id="colFind" placeholder="Nach Namen suchen" data-i18n-placeholder="u.findPh" aria-label="Nach Namen suchen" data-i18n-aria-label="u.findPh">
+    <div class="histList" id="colList"></div>
+    <p class="muted hidden" id="colInfo" style="margin:0"></p>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
+
+  <!-- P33 Collage-Details: gross anzeigen, Angaben, als Motiv verwenden -->
+  <aside class="pane mkP" id="sideCollage" data-pno="P33">
+    <div class="paneHead"><h2 id="colTitle"></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="colBig"><img id="colImg" alt=""></div>
+    <dl class="mkFacts" id="colFacts"></dl>
+    <div class="btnRow doneRow"><button type="button" data-go="CLOSE" data-i18n="u.cancel">Abbrechen</button><button type="button" id="colOpen" data-i18n="u.colOpen" data-i18n-title="u.colOpenT">In Collage öffnen</button><button type="button" class="primary" id="colUse" data-i18n="u.colUse">Als Motiv verwenden</button></div>
+  </aside>
+
   <!-- P19 Motiv bearbeiten -->
   <aside class="pane mkP" id="sideCrop" data-pno="P19">
     <div class="paneHead"><h2 class="boxTitle"><span class="num">3</span><span data-i18n="u.crop">Motiv bearbeiten</span></h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
@@ -648,6 +737,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
       <div id="musicOpts">
         <label class="lbl" for="vol" data-i18n="p.volume">Lautstärke</label>
         <input type="range" id="vol" min="0" max="100" value="80">
+        <label class="swRow"><span data-i18n="p.tail">Musik nach dem Puzzle weiterlaufen lassen</span><input type="checkbox" class="sw" role="switch" id="tail" checked></label>
         <label class="swRow"><span data-i18n="p.fade">Ausblenden am Ende</span><input type="checkbox" class="sw" role="switch" id="fade" checked></label>
       </div>
     </div>
@@ -815,10 +905,12 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
         <p class="muted mkNote" data-i18n="u.webTitleNote"></p>
         <div class="linkRow"><code id="linkTxt"></code><button class="cpy" type="button" title="Link kopieren" data-i18n-title="p.copy" aria-label="Link kopieren" data-i18n-aria-label="p.copy" id="cpy"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
         <p class="muted" id="linkState" style="margin:0"></p>
+        <div class="kOff"><h3 class="paneSection" data-i18n="qr.title">QR-Code</h3>
+        <div class="qrBlock" id="lkQr"><div class="qrImg"></div><p class="muted qrNote hidden"></p><div class="btnRow"><button type="button" class="qrDl" data-i18n="qr.dl">QR-Code herunterladen</button></div></div></div>
         <label class="swRow"><span data-i18n="p.active">Aktiv</span><input type="checkbox" class="sw" role="switch" id="lkActive"></label>
         <label class="swRow"><span data-i18n="p.download">Download erlauben (Foto)</span><input type="checkbox" class="sw" role="switch" id="lkDl"></label>
         <label class="swRow hidden" id="lkVidRow"><span data-i18n="p.videoAllow">Download erlauben (Video)</span><input type="checkbox" class="sw" role="switch" id="lkVid"></label>
-        <label class="swRow"><span data-i18n="p.metadata">Metadaten zeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="lkMeta"></label>
+        <label class="swRow"><span data-i18n="p.metadata">Metadaten anzeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="lkMeta"></label>
         <label class="swRow"><span data-i18n="p.passwordOpt">Passwort (optional)</span><input type="checkbox" class="sw" role="switch" id="lkPw"></label>
         <div id="pwRow" class="hidden"><input type="password" id="pwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="pwSet" data-i18n="p.pwSet">Setzen</button></div>
         <label class="lbl" for="lkFrom" data-i18n="p.validFrom">Gültig ab</label>
@@ -907,10 +999,12 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
     <div id="shFacts"></div>
     <h3 class="paneSection" data-i18n="st.title">Zugriffs-Statistik</h3>
     <button type="button" class="mkRow" id="shStats" data-go="P29" data-stack="push"><span id="shStatsN"></span><span class="muted" id="shStatsLast"></span><b aria-hidden="true">›</b></button>
+    <h3 class="paneSection" data-i18n="qr.title">QR-Code</h3>
+    <div class="qrBlock" id="shQr"><div class="qrImg"></div><p class="muted qrNote hidden"></p><div class="btnRow"><button type="button" class="qrDl" data-i18n="qr.dl">QR-Code herunterladen</button></div></div>
     <label class="swRow"><span data-i18n="p.active">Aktiv</span><input type="checkbox" class="sw" role="switch" id="shActive"></label>
     <label class="swRow"><span data-i18n="p.download">Download erlauben (Foto)</span><input type="checkbox" class="sw" role="switch" id="shDl"></label>
     <label class="swRow hidden" id="shVidRow"><span data-i18n="p.videoAllow">Download erlauben (Video)</span><input type="checkbox" class="sw" role="switch" id="shVid"></label>
-    <label class="swRow"><span data-i18n="p.metadata">Metadaten zeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="shMeta"></label>
+    <label class="swRow"><span data-i18n="p.metadata">Metadaten anzeigen (Datum, Ort)</span><input type="checkbox" class="sw" role="switch" id="shMeta"></label>
     <label class="swRow"><span data-i18n="p.passwordOpt">Passwort (optional)</span><input type="checkbox" class="sw" role="switch" id="shPw"></label>
     <div id="shPwRow" class="hidden"><input type="password" id="shPwInput" autocomplete="new-password" placeholder="Neues Passwort" data-i18n-placeholder="p.pwNew"><button type="button" id="shPwSet" data-i18n="p.pwSet">Setzen</button></div>
     <label class="lbl" for="shFrom" data-i18n="p.validFrom">Gültig ab</label>
@@ -953,15 +1047,18 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
   <!-- P11 Einstellungen, P12 Über, P13 Changelog -->
   <aside class="pane mkP" id="sideSettings" data-pno="P11">
     <div class="paneHead"><h2 data-i18n="settings.title">Einstellungen</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
-    <div id="settingsBody"></div>
   <div id="settingsMore">
-    <h3 class="paneSection" data-i18n="set.defHead">Standard für neue Puzzles</h3>
+    <h3 class="paneSection first" data-i18n="set.defHead">Standard für neue Puzzles</h3>
     <p class="muted" data-i18n="set.defIntro"></p>
     <dl class="mkFacts" id="defFacts"></dl>
     <label class="lbl" data-i18n="set.defSteps">Bei «Neues Puzzle» selber einstellen</label>
     <div class="mkStepPick" id="defSteps"></div>
     <p class="muted" id="defSrc"></p>
     <div class="btnRow"><button type="button" id="defFromCur" data-i18n="set.defFromCur">Aktuelles Puzzle als Standard</button><button type="button" id="defReset" data-i18n="set.defReset">Werkseinstellung</button></div>
+    <h3 class="paneSection" data-i18n="set.videoHead">Video-Download</h3>
+    <label class="swRow"><span data-i18n="set.videoOn">Videos erstellen</span><input type="checkbox" class="sw" role="switch" id="videoOn"></label>
+    <p class="muted" data-i18n="set.videoNote"></p>
+    <p class="muted" id="videoState"></p>
     <h3 class="paneSection" data-i18n="set.madeHead">Erstellt mit</h3>
     <div class="shareUrlForm"><label for="madeWithText" data-i18n="set.madeTextLbl">Erstellt mit</label>
     <input type="text" id="madeWithText" maxlength="120" placeholder="" data-i18n-placeholder="set.madeTextPh"></div>
@@ -971,10 +1068,8 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
     <p class="muted" id="copyFixed"></p>
     <div class="btnRow"><button type="button" id="madeSave" data-i18n="set.madeSave">Speichern</button></div>
     <p class="error hidden" id="madeErr"></p>
-    <h3 class="paneSection" data-i18n="set.videoHead">Video-Download</h3>
-    <label class="swRow"><span data-i18n="set.videoOn">Videos erstellen</span><input type="checkbox" class="sw" role="switch" id="videoOn"></label>
-    <p class="muted" data-i18n="set.videoNote"></p>
-    <p class="muted" id="videoState"></p>
+    <!-- Reihenfolge nach Entscheid 76: Standard, Video (markeneigen), Erstellt mit, Live-Links, ntfy (0.1.28) -->
+    <div id="settingsBody"></div>
     <div id="ntfySet" class="hidden">
     <h3 class="paneSection" data-i18n="set.ntfyHead">Meldungen aufs Handy (ntfy)</h3>
     <p class="muted" id="ntfyState"></p>
@@ -994,6 +1089,16 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
     <div id="aboutBody"></div>
     <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
   </aside>
+  <aside class="pane mkP" id="sxPane" data-pno="P34">
+    <div class="paneHead"><h2 data-i18n="sx.title">Statistik</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
+    <div class="sxFilt">
+      <div class="sxSeg" id="sxRange" role="group" aria-label="Zeitraum" data-i18n-aria-label="sx.range"><button type="button" data-r="7" data-i18n="sx.r7">7 Tage</button><button type="button" data-r="30" data-i18n="sx.r30">30 Tage</button><button type="button" data-r="365" data-i18n="sx.r365">12 Monate</button><button type="button" data-r="all" data-i18n="sx.rAll">Alles</button></div>
+      <label><span data-i18n="sx.from">von</span><input type="date" id="sxFrom"></label>
+      <label><span data-i18n="sx.to">bis</span><input type="date" id="sxTo"></label>
+    </div>
+    <div id="sxBody"></div>
+    <div class="btnRow doneRow"><button type="button" class="paneDone" data-go="CLOSE" data-i18n="pane.done">Fertig</button></div>
+  </aside>
   <aside class="pane mkP" id="sideChangelog" data-pno="P13">
     <div class="paneHead"><h2 data-i18n="about.changelog">Changelog</h2><button type="button" class="paneX" data-go="CLOSE" title="Schliessen" data-i18n-title="pane.close" aria-label="Schliessen" data-i18n-aria-label="pane.close">×</button></div>
     <div id="changelogBody"></div>
@@ -1004,6 +1109,7 @@ a.famRow:hover, a.famRow:focus-visible { border-color:var(--accent); }
 <audio id="audio" preload="none"></audio>
 
 {{I18N}}<script src="/common.js?v={{VERSION}}"></script>
+<script src="/qr.js?v={{VERSION}}"></script>
 <script src="/profile.js?v={{VERSION}}"></script>
 <script src="/puzzle-engine.js?v={{VERSION}}"></script>
 {{MODE}}<script>
@@ -1104,7 +1210,7 @@ function config() {
            frame: $("optFrame").checked, ghost: $("optGhost").checked, ghostPct: +$("ghostPct").value, T: duration(), durMode: st.durMode,
            hold: +$("hold").value, tempo: +$("tempo").value / 100, frameAt: +$("mkRahmen").value, ramp: +$("mkRamp").value, lead: +$("mkLead").value,
            title: $("pzName").value.trim(), textMode: st.textMode, ...txCfg(st.T.text, "text"), ...txCfg(st.T.greet, "greet"),
-           music: st.music ? { id: st.music.id, name: st.music.name, volume: +$("vol").value / 100, fade: $("fade").checked } : null };
+           music: st.music ? { id: st.music.id, name: st.music.name, volume: +$("vol").value / 100, fade: $("fade").checked, tail: $("tail").checked } : null };
 }
 function applyConfig(c) {
   st.count = c.count; st.start = c.start; st.edges = c.edges || "round"; st.seed = c.seed; st.durMode = c.durMode; st.textMode = c.textMode || "in";
@@ -1116,7 +1222,7 @@ function applyConfig(c) {
   $("mkRahmen").value = c.frameAt ?? 40; $("mkRamp").value = c.ramp ?? 5; $("mkLead").value = c.lead ?? 1.5;
   $("pzName").value = c.title || "";
   st.music = c.music ? (st.tracks.find(x => x.id === c.music.id) || { id: c.music.id, name: c.music.name, duration: c.durMode === "music" ? c.T : null, missing: true }) : null;
-  $("vol").value = Math.round((c.music ? c.music.volume : .8) * 100); $("fade").checked = c.music ? c.music.fade : true;
+  $("vol").value = Math.round((c.music ? c.music.volume : .8) * 100); $("fade").checked = c.music ? c.music.fade : true; $("tail").checked = c.music ? c.music.tail !== false : true;
   if (CFONTS[st.T.text.font] || CFONTS[st.T.greet.font]) txFonts().then(() => rebuild(true));
   drawControls();
 }
@@ -1187,21 +1293,24 @@ function syncPlayer() {
 }
 const musicUrl = m => "/api/music/" + encodeURIComponent(m.id);
 function stopAudio() { audio.pause(); }
+// Ende der Musik in der Vorschau: Puzzle-Ende oder, mit «weiterlaufen lassen», Ende des Stücks
+const prevEnd = () => musicEnd(P.cfg.T, isFinite(audio.duration) ? audio.duration : 0, $("tail").checked);
+const prevVol = t => musicVolume(t, prevEnd(), +$("vol").value / 100, $("fade").checked);
 function startAudio() {
   // Musik läuft immer in normalem Tempo, unabhängig vom Vorschau-Tempo 2×/3×/5× (Roger 21.11.2026, 0.1.4)
   if (!st.music || st.music.missing) return;
   const url = musicUrl(st.music);
   if (audio.dataset.src !== url) { audio.src = url; audio.dataset.src = url; }
-  audio.currentTime = P.t; audio.volume = musicVolume(P.t, P.cfg.T, +$("vol").value / 100, $("fade").checked);
+  audio.currentTime = P.t; audio.volume = prevVol(P.t);
   audio.play().catch(() => {});
 }
-function pausePreview() { if (playing) { playing = false; stopAudio(); syncPlayer(); } }
+function pausePreview() { if (playing) { playing = false; stopAudio(); syncPlayer(); } else if (!previewId) stopAudio(); }
 function loop(ts) {
   if (!playing) return;
   const speed = +$("pSpeed").value, dt = Math.min(.1, (ts - last) / 1000) * speed; last = ts;
-  let tt = P.t + dt; if (tt >= P.cfg.T) { tt = P.cfg.T; playing = false; stopAudio(); }
+  let tt = P.t + dt; if (tt >= P.cfg.T) { tt = P.cfg.T; playing = false; if (!$("tail").checked) stopAudio(); }
   P.draw(tt);
-  if (!audio.paused) audio.volume = musicVolume(tt, P.cfg.T, +$("vol").value / 100, $("fade").checked);
+  if (!audio.paused) audio.volume = prevVol(tt);
   syncPlayer(); drawChart(); if (playing) requestAnimationFrame(loop);
 }
 $("pPlay").onclick = () => {
@@ -1210,7 +1319,7 @@ $("pPlay").onclick = () => {
   playing = !playing; last = performance.now(); syncPlayer();
   if (playing) { stopPreview(); dStop(); startAudio(); requestAnimationFrame(loop); } else stopAudio();
 };
-$("pScrub").oninput = e => { if (!P.cfg) return; P.draw(P.cfg.T * e.target.value / 1000); if (!audio.paused) audio.currentTime = P.t; syncPlayer(); drawChart(); };
+$("pScrub").oninput = e => { if (!P.cfg) return; if (!playing) stopAudio(); P.draw(P.cfg.T * e.target.value / 1000); if (!audio.paused) audio.currentTime = P.t; syncPlayer(); drawChart(); };
 $("pSpeed").onchange = () => { if (playing && audio.paused) startAudio(); };
 
 // ---------- Schritte links: Häkchen, Zusammenfassungen, Ablauf in der Vorschau ----------
@@ -1229,7 +1338,7 @@ function stepDone() {
 }
 function drawSteps() {
   const done = stepDone(), std = x => STEP_CHOICE.includes(x) && !own(x);
-  document.querySelectorAll("[data-tick]").forEach(x => x.classList.toggle("hidden", !done[x.dataset.tick]));
+  document.querySelectorAll("[data-tick]").forEach(x => x.classList.toggle("hidden", !(done[x.dataset.tick] || std(x.dataset.tick))));
   $("motifNow").classList.toggle("hidden", !st.img);
   $("sumP2").textContent = st.img ? "" : t("p.needMotif");
   $("sumP19").textContent = st.img ? stepSum("crop") : "";
@@ -1248,8 +1357,9 @@ function drawSteps() {
   $("mkProgN").textContent = next ? t("u.progNext", { done: k, n, next: tp("u.k.", next) }) : t("u.progress", { done: k, n });
   $("mkProgList").replaceChildren(...STEP_KEYS.map(x => {
     const li = el("li", done[x] ? "done" : std(x) ? "std" : x === next ? "next" : ""), b = el("button"); b.type = "button";
-    const sp = el("span", "", label(x)); if (!done[x] && std(x)) sp.append(el("small", "", t("u.std")));
-    b.append(sp); b.title = (done[x] ? "✓ " : "") + label(x) + (!done[x] && std(x) ? " · " + t("u.std") : "");
+    if (x === next) b.setAttribute("aria-current", "step");
+    const sp = el("span", "", (ok(x) ? "✓ " : "") + label(x)); if (!done[x] && std(x)) sp.append(el("small", "", t("u.std")));
+    b.append(sp); b.title = (ok(x) ? "✓ " : "") + label(x) + (!done[x] && std(x) ? " · " + t("u.std") : "");
     b.onclick = () => go(STEP_PANEL[x]);
     li.append(b); return li;
   }));
@@ -1294,7 +1404,7 @@ function drawStepPick() {
       lab.append(cb, sp); return lab;
     }
     cb.checked = own(x);
-    cb.onchange = () => { st.steps = { ...(st.steps || ALL_STEPS()), [x]: cb.checked }; touch(); };
+    cb.onchange = () => { st.steps = { ...(st.steps || ALL_STEPS()), [x]: cb.checked }; if (!cb.checked) stepToDefault(x); touch(); drawSteps(); };
     const sp = el("span"); sp.append(el("strong", "", tp("u.ks.", x)), el("small", "", own(x) ? stepSum(x) : t("u.stdIs", { value: stepDefault(x) })));
     lab.append(cb, sp); return lab;
   }));
@@ -1338,7 +1448,7 @@ function afterMotif() {
 async function quickShare() {
   st.cropDone = true;
   if (!st.share.enabled) { go("P7"); return; }
-  try { st.dirty = true; await save(); if (!st.link) await linkCall({ download: false, days: 30 }); go("P7"); toast(t("p.linkMade")); }
+  try { st.dirty = true; await save(); if (!st.link) await linkCall({ download: false, days: 7 }); go("P7"); toast(t("p.linkMade")); }
   catch (e) { fail(e); go("P7"); }
 }
 // nur die Häkchen als Standard für neue Puzzles, die Werte des Standards bleiben
@@ -1352,6 +1462,20 @@ async function stepAsDefault(x) {
   const steps = { ...FACTORY_STEPS(), ...((st.defaults && st.defaults.steps) || {}) };
   try { await saveDefaults({ ...d, ...Object.fromEntries(fields.map(f => [f, cur[f]])) }, steps); toast(t("u.stepStdDone", { step: tp("u.ks.", x) })); drawSteps(); }
   catch (e) { fail(e); }
+}
+// Abgewählter Schritt nimmt die Werte des Standards, damit «Standard» auch gilt (Entscheid 69b, 0.1.28)
+function stepToDefault(x) {
+  if (x === "view") return;
+  const d = defaultConfig(), crop = st.crop;
+  if (x === "crop") {
+    if (crop && crop.fmt === (d.format || "photo") && !crop.rot && crop.z === 1) return;
+    st.crop = newCrop(d.format || "photo"); st.base = null; st.photoDirty = true; st.photoGen++; rebuild(); return;
+  }
+  const fields = x === "music" ? ["music"] : STEP_FIELDS[x];
+  applyConfig({ ...config(), ...Object.fromEntries(fields.map(f => [f, d[f]])) });
+  st.crop = crop;
+  if (!st.music && st.durMode === "music") { st.durMode = "own"; drawControls(); }
+  rebuild();
 }
 for (const [x, pno] of Object.entries(STEP_STD)) {
   const row = document.querySelector(`[data-pno="${pno}"] .doneRow`), b = el("button", "paneStd", t("u.stepStd"));
@@ -1467,6 +1591,77 @@ $("albUse").onclick = async () => {
   $("albUse").disabled = true;
   try { setMotif(await loadImage(`/api/assets/${p.id}/preview`), s.name + (p.date ? " · " + fmtDate(p.date) : ""), p.id, "Immich"); afterMotif(); }
   catch (e) { fail(e); } finally { $("albUse").disabled = false; }
+};
+
+// ---------- P32 Collage wählen, P33 Collage-Details (Entscheid 66) ----------
+// Puzzle holt Liste und Bilder über das eigene Backend (/api/collages…), der Schlüssel bleibt auf dem Server.
+// «Als Motiv verwenden» lädt das fertige Bild einmal; gespeichert wird beim Puzzle eine eigene Kopie.
+const col = { data: null, id: null };
+async function loadCollages() {
+  $("colInfo").textContent = t("src.loading"); $("colInfo").classList.remove("hidden");
+  if (!col.data) $("colList").replaceChildren();
+  try { col.data = await api("GET", "/api/collages"); } catch (e) { col.data = { enabled: true, collages: [], error: "down" }; }
+  drawCollages();
+}
+function colSub(c) {
+  return [c.created && fmtDate(c.created * 1000), c.photos != null && t("u.colPhotos", { n: fmt(c.photos) }), c.format].filter(Boolean).join(" · ");
+}
+function drawCollages() {
+  const d = col.data || { collages: [] }, items = d.collages || [];
+  $("colNew").classList.toggle("hidden", !d.new);
+  $("colFind").classList.toggle("hidden", !items.length);
+  $("colList").replaceChildren(...items.map(c => {
+    const row = el("div", "hist" + (c.id === col.id ? " on" : "")); row.dataset.id = c.id; row.dataset.name = plain(c.name || "");
+    const img = el("img"); img.alt = ""; img.loading = "lazy"; img.src = c.thumb; img.onerror = () => { img.style.visibility = "hidden"; };
+    const open = el("button", "open"); open.type = "button"; open.setAttribute("aria-pressed", String(c.id === col.id));
+    open.append(el("strong", "", c.name || t("u.noName")), el("span", "histSub", colSub(c)));
+    open.onclick = () => openCollageDetail(c.id);
+    const more = el("button", "mkGo", "›"); more.type = "button"; more.setAttribute("aria-label", c.name || t("u.noName")); more.onclick = open.onclick;
+    row.onclick = e => { if (!e.target.closest("button")) open.onclick(); };  // ganze Zeile öffnet, wie die Boxen mit [>]
+    row.append(img, open, more);
+    return row;
+  }));
+  filterCollages();
+}
+function filterCollages() {
+  const d = col.data || {}, q = plain($("colFind").value.trim()), rows = [...$("colList").children];
+  for (const r of rows) r.classList.toggle("hidden", !r.dataset.name.includes(q));
+  const msg = d.error ? t({ down: "u.col.down", denied: "u.col.denied", missing: "u.col.missing", off: "u.col.off" }[d.error] || "u.col.bad") : !rows.length ? t("u.colNone") : rows.every(r => r.classList.contains("hidden")) ? t("p.noMatch") : "";
+  $("colInfo").textContent = msg; $("colInfo").classList.toggle("hidden", !msg);
+}
+$("colFind").addEventListener("input", filterCollages);
+$("colNew").onclick = () => { if (col.data && col.data.new) window.open(col.data.new, "_blank", "noopener"); };
+function colCurrent() { return col.data && (col.data.collages || []).find(c => c.id === col.id); }
+function openCollageDetail(id) {
+  col.id = id; drawCollages(); drawCollageDetail(); go("P33");
+}
+function drawCollageDetail() {
+  const c = colCurrent(); if (!c) return;
+  $("colTitle").textContent = c.name || t("u.noName");
+  $("colImg").src = c.thumb; $("colImg").alt = c.name || "";
+  const full = new Image(); full.onload = () => { if (col.id === c.id) $("colImg").src = full.src; }; full.src = c.image;  // erst klein, dann scharf
+  gridRows($("colFacts"), [
+    ...(c.created ? [[t("pz.created"), fmtDate(c.created * 1000)]] : []),
+    ...(c.updated && c.updated !== c.created ? [[t("pz.updated"), fmtDate(c.updated * 1000)]] : []),
+    ...(c.photos != null ? [[t("u.colPhotosL"), fmt(c.photos)]] : []),
+    ...(c.template ? [[t("u.colTemplate"), c.template]] : []),
+    ...(c.format ? [[t("u.format"), c.format]] : []),
+    ...(c.width && c.height ? [[t("u.colSize"), t("u.colPx", { w: fmt(c.width), h: fmt(c.height) })]] : []),
+  ]);
+}
+$("colOpen").onclick = () => { const c = colCurrent(); if (c) window.open(c.open, "_blank", "noopener"); };
+$("colUse").onclick = async () => {
+  const c = colCurrent(); if (!c) return;
+  $("colUse").disabled = true;
+  // Collage 0.10.0: Wird eine Collage gerade neu gezeichnet oder ist sie weg, kommt 404 → «nicht mehr verfügbar», Liste neu laden
+  try {
+    const r = await fetch(c.image, { credentials: "same-origin" });
+    if (r.status === 404) { toast(t("u.colGone"), true); col.id = null; go("P32"); loadCollages(); return; }
+    if (!r.ok) throw new Error(r.status);
+    // nicht freigeben: die Box «Motiv» zeigt img.src weiter (wie beim Hochladen)
+    setMotif(await loadImage(URL.createObjectURL(await r.blob())), c.name || t("u.noName"), null, "Collage");
+    afterMotif();
+  } catch (e) { toast(t("u.col.down"), true); } finally { $("colUse").disabled = false; }
 };
 
 // ---------- P19 Motiv bearbeiten: Format, Drehen, Ausschnitt (Werte in % der Bühne) ----------
@@ -1678,6 +1873,19 @@ function drawTxtPrev() {
     drawText(g, txCfg(o, "text"), w, h, 1);
   });
 }
+// Vorschau gross zeigen: das Element wandert in die Überlagerung und wird in der neuen Grösse neu gezeichnet
+let txSpot = null;
+function txZoom(on) {
+  const p = $("mkTxtPrev"), z = $("txZoom");
+  if (on === !!txSpot) return;
+  if (on) { txSpot = document.createComment("mkTxtPrev"); p.before(txSpot); z.appendChild(p); }
+  else { txSpot.replaceWith(p); txSpot = null; }
+  z.classList.toggle("hidden", !on); drawTxtPrev();
+}
+$("mkTxtPrev").addEventListener("click", e => { if (!txSpot) { e.stopPropagation(); txZoom(true); } });
+// #txZoom steht erst am Ende der Seite: Klick über document abfangen, sonst bricht das Skript hier ab
+document.addEventListener("click", e => { if (txSpot && e.target.closest("#txZoom")) txZoom(false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && txSpot) { e.stopPropagation(); txZoom(false); } }, true);
 function drawTextPanel() {
   const prev = $("mkTxtPrev"), o = cur(), greet = st.tx === "greet";
   drawTextHub();
@@ -1688,6 +1896,7 @@ function drawTextPanel() {
   $("mkArc").value = o.arc; $("mkArcV").textContent = String(o.arc);
   $("mkRot").value = o.rot; $("mkRotV").textContent = o.rot + "°";
   prev.style.aspectRatio = greet ? "1200/630" : st.base ? `${st.base.width}/${st.base.height}` : "";
+  prev.style.setProperty("--ar", greet ? 1200 / 630 : st.base ? st.base.width / st.base.height : 3896 / 2754);
   drawTxtPrev();
   // «Für wen / Anlass» als Vorschlag, solange kein Schriftzug steht (Roger 22.11.2026, 0.1.8)
   const forWhom = $("pzFor").value.trim();
@@ -1806,10 +2015,12 @@ $("musicFile").onchange = async e => {
     drawControls(); touch(); rebuild(); toast(t("p.uploaded"));
   } catch (err) { fail(err); }
 };
-$("vol").addEventListener("input", () => { if (!audio.paused && P.cfg) audio.volume = musicVolume(P.t, P.cfg.T, +$("vol").value / 100, $("fade").checked); });
+$("vol").addEventListener("input", () => { if (!audio.paused && P.cfg) audio.volume = clamp(prevVol(playing ? P.t : audio.currentTime), 0, 1); });
 $("vol").addEventListener("change", touch);
 $("fade").addEventListener("change", touch);
 audio.addEventListener("ended", () => { if (previewId) stopPreview(); });
+// Musik läuft nach dem Puzzle weiter: Lautstärke fürs Ausblenden am Ende des Stücks nachführen
+audio.addEventListener("timeupdate", () => { if (!playing && !previewId && !audio.paused && P.cfg) audio.volume = clamp(prevVol(audio.currentTime), 0, 1); });
 
 // ---------- P22 Bisherige Puzzles ----------
 async function loadPuzzles() {
@@ -1861,6 +2072,10 @@ var puzzleDetailId = null, puzzleDetail = null;
 const DP = new Puzzle($("pzCanvas")), dAudio = new Audio();
 let dPlaying = false, dLast = 0;
 function dStop() { dPlaying = false; dAudio.pause(); dSync(); }
+// Ende der Musik: Puzzle-Ende oder, mit «Musik nach dem Puzzle weiterlaufen lassen», Ende des Stücks
+const dEnd = () => musicEnd(DP.cfg.T, isFinite(dAudio.duration) ? dAudio.duration : 0, !!DP.cfg.music && DP.cfg.music.tail !== false);
+dAudio.addEventListener("timeupdate", () => { const m = DP.cfg && DP.cfg.music;
+  if (!dPlaying && m && !dAudio.paused) dAudio.volume = clamp(musicVolume(dAudio.currentTime, dEnd(), m.volume, m.fade), 0, 1); });
 function dSync() {
   const T = DP.cfg ? DP.cfg.T : 0;
   $("pzScrub").value = T ? Math.round(DP.t / T * 1000) : 0; $("pzTime").textContent = fmtT(DP.t) + " / " + fmtT(T);
@@ -1874,9 +2089,9 @@ function dClear() {
 function dLoop(ts) {
   if (!dPlaying || !DP.cfg) return;
   let tt = DP.t + Math.min(.1, (ts - dLast) / 1000); dLast = ts;
-  if (tt >= DP.cfg.T) { tt = DP.cfg.T; dPlaying = false; dAudio.pause(); }
+  if (tt >= DP.cfg.T) { tt = DP.cfg.T; dPlaying = false; if (dEnd() <= DP.cfg.T) dAudio.pause(); }
   DP.draw(tt);
-  const m = DP.cfg.music; if (m && !dAudio.paused) dAudio.volume = musicVolume(tt, DP.cfg.T, m.volume, m.fade);
+  const m = DP.cfg.music; if (m && !dAudio.paused) dAudio.volume = musicVolume(tt, dEnd(), m.volume, m.fade);
   dSync(); if (dPlaying) requestAnimationFrame(dLoop);
 }
 $("pzPlay").onclick = () => {
@@ -1886,10 +2101,10 @@ $("pzPlay").onclick = () => {
   pausePreview(); stopPreview();
   dPlaying = true; dLast = performance.now(); dSync();
   const m = DP.cfg.music;
-  if (m) { dAudio.src = musicUrl(m); dAudio.currentTime = DP.t; dAudio.volume = musicVolume(DP.t, DP.cfg.T, m.volume, m.fade); dAudio.play().catch(() => {}); }
+  if (m) { dAudio.src = musicUrl(m); dAudio.currentTime = DP.t; dAudio.volume = musicVolume(DP.t, dEnd(), m.volume, m.fade); dAudio.play().catch(() => {}); }
   requestAnimationFrame(dLoop);
 };
-$("pzScrub").oninput = e => { if (!DP.cfg) return; DP.draw(DP.cfg.T * e.target.value / 1000); if (!dAudio.paused) dAudio.currentTime = DP.t; dSync(); };
+$("pzScrub").oninput = e => { if (!DP.cfg) return; if (!dPlaying) dAudio.pause(); DP.draw(DP.cfg.T * e.target.value / 1000); if (!dAudio.paused) dAudio.currentTime = DP.t; dSync(); };
 async function setPuzzleDetail(id) {
   if (id !== puzzleDetailId) dClear();
   puzzleDetailId = id; puzzleDetail = null;
@@ -1916,7 +2131,7 @@ function drawPuzzleDetail() {
   const c = (puzzleDetail && puzzleDetail.id === p.id && puzzleDetail.config) || {};
   const flags = [c.rot && t("p.rot"), c.frame && t("p.frame"), c.ghost && t("p.ghost")].filter(Boolean);
   const l = p.link;
-  const status = !l ? t("pz.noLink") : l.expired ? t("p.state.expired") : l.active === false ? t("p.state.off") : l.pending ? t("sh.from", { date: fmtDate(l.valid_from * 1000) }) : t("p.linked");
+  const status = !l ? t("pz.noLink") : l.expired ? t("p.state.expired") : l.active === false ? t("p.state.off") : l.pending ? t("sh.from", { date: fmtDay(l.valid_from * 1000) }) : t("p.linked");
   gridRows($("pzFacts"), [
     [t("pz.length"), fmtT(p.T)],
     [t("pz.created"), fmtDate(p.created * 1000)],
@@ -1927,7 +2142,7 @@ function drawPuzzleDetail() {
     ...(puzzleDetail ? [[t("pz.music"), c.music ? c.music.name : t("p.noMusic")]] : []),
     ...(c.text ? [[t("u.text"), c.text.replace(/\s*\n\s*/g, " / ") + " · " + fontLabel(c.textFont || "hand")]] : []),
     [t("pz.link"), status + (l && l.protected ? " · " + t("sh.protected") : "")],
-    ...(l ? [[t("pz.valid"), l.expires_at ? fmtDate(l.expires_at * 1000) : t("sh.unlimited")], [t("pz.views"), shareViews(l)], [t("pz.likes"), "♥ " + t("sh.likes", { n: l.likes || 0 })]] : [])]);
+    ...(l ? [[t("pz.valid"), l.expires_at ? fmtDay(l.expires_at * 1000) : t("sh.unlimited")], [t("pz.views"), shareViews(l)], [t("pz.likes"), "♥ " + t("sh.likes", { n: l.likes || 0 })]] : [])]);
   $("pzLinkBox").classList.toggle("hidden", !l);
   if (l) $("pzUrl").textContent = l.url || l.path;
 }
@@ -2004,6 +2219,30 @@ $("newBtn").onclick = async () => { await save().catch(fail); resetEditor(); go(
 $("delBtn").onclick = () => deletePuzzle(st.id);
 
 // ---------- P7 Teilen ----------
+// QR-Code eines Links (Entscheid 80), lokal mit qr.js. Ohne öffentliche Adresse kein Code; abgelaufen oder aus: grau mit Hinweis.
+// Herunterladen als SVG «<werk>-qr.svg».
+function drawQr(box, url, live, name) {
+  const img = box.querySelector(".qrImg"), note = box.querySelector(".qrNote"), btn = box.querySelector(".qrDl");
+  let abs = ""; try { abs = url ? new URL(url).href : ""; } catch { abs = ""; }
+  if (box.dataset.url !== abs) {
+    box.dataset.url = abs;
+    const svg = abs && window.qrSvg ? qrSvg(abs, "qr") : null;
+    if (svg) svg.setAttribute("aria-label", t("qr.title"));
+    img.replaceChildren(...(svg ? [svg] : []));
+  }
+  box.classList.toggle("off", !live);
+  note.textContent = !abs ? t("sh.noUrl") : live ? "" : t("qr.off");
+  note.classList.toggle("hidden", !note.textContent);
+  btn.disabled = !img.firstChild;
+  btn.onclick = () => {
+    const svg = img.querySelector("svg"); if (!svg) return;
+    const copy = svg.cloneNode(true); copy.setAttribute("width", "512"); copy.setAttribute("height", "512");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: "image/svg+xml" }));
+    a.download = ((name || "puzzle").replace(/[\\/:*?"<>|]+/g, "_").trim() || "puzzle") + "-qr.svg";
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+}
 function linkUrl() { return st.link ? (st.link.url || st.link.path) : ""; }
 function drawLink() {
   drawState(); drawPvTitle();
@@ -2017,12 +2256,13 @@ function drawLink() {
   $("pwRow").classList.add("hidden");
   drawValidity("lk", l);
   const state = [];
-  if (l.pending && l.valid_from) state.push(t("sh.from", { date: fmtDate(l.valid_from * 1000) }));
+  if (l.pending && l.valid_from) state.push(t("sh.from", { date: fmtDay(l.valid_from * 1000) }));
   if (!l.active) state.push(t("p.state.off"));
   if (l.expired) state.push(t("p.state.expired"));
-  else if (l.expires_at) state.push(t("p.state.until", { date: fmtDate(l.expires_at * 1000) }));
+  else if (l.expires_at) state.push(t("p.state.until", { date: fmtDay(l.expires_at * 1000) }));
   state.push(t("p.state.views", { n: l.views }));
   $("linkState").textContent = state.join(" · ");
+  drawQr($("lkQr"), l.url, l.active && !l.expired, l.title || st.title);
   try { $("ogHost").textContent = new URL(linkUrl(), location.href).host; } catch { $("ogHost").textContent = ""; }
   drawInfo();
 }
@@ -2033,7 +2273,7 @@ async function linkCall(body) {
 $("mkLink").onclick = async () => {
   try {
     st.dirty = st.dirty || !st.id; await save();
-    await linkCall({ download: false, days: 30 });
+    await linkCall({ download: false, days: 7 });
     toast(t("p.linkMade"));
   } catch (e) { fail(e); }
 };
@@ -2041,20 +2281,19 @@ $("lkActive").onchange = e => linkCall({ active: e.target.checked }).catch(err =
 $("lkDl").onchange = e => linkCall({ download: e.target.checked }).catch(err => { fail(err); drawLink(); });
 $("lkVid").onchange = e => linkCall({ video: e.target.checked }).catch(err => { fail(err); drawLink(); });
 $("lkMeta").onchange = e => linkCall({ metadata: e.target.checked }).catch(err => { fail(err); drawLink(); });
-function isoDay(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 // Gültig ab / Gültig bis (D2, Roger 22.11.2026), gleich in P7 (Präfix lk) und P10 (sh): jeder Link hat ein «ab» (Standard heute);
 // «bis» als Auswahl wie in der Liste, darunter das Datum: berechnet aus ab + Tage, bei «bis Datum…» editierbar, bei «unbegrenzt» nur der Text
 function drawValidity(p, l) {
   const from = $(p + "From"), sel = $(p + "Days"), until = $(p + "Until");
   if (!sel.options.length) daysSelect(sel);
-  if (document.activeElement !== from) from.value = l.valid_from ? isoDay(new Date(l.valid_from * 1000)) : isoDay(new Date());
+  if (document.activeElement !== from) from.value = serverDay(l.valid_from ? l.valid_from * 1000 : new Date());
   const days = l.days === "until" ? "until" : String(l.days ?? 0);
   sel.value = [...sel.options].some(o => o.value === days) ? days : "until";
   showUntil(p);
-  if (document.activeElement !== until) until.value = l.expires_at ? isoDay(new Date(l.expires_at * 1000)) : "";
+  if (document.activeElement !== until) until.value = l.expires_at ? serverDay(l.expires_at * 1000) : "";
 }
 function showUntil(p) {
-  const sel = $(p + "Days"), until = $(p + "Until"), today = isoDay(new Date()), from = $(p + "From").value;
+  const sel = $(p + "Days"), until = $(p + "Until"), today = serverDay(new Date()), from = $(p + "From").value;
   until.classList.toggle("hidden", sel.value === "0"); $(p + "None").classList.toggle("hidden", sel.value !== "0");
   until.disabled = sel.value !== "until";
   until.min = from > today ? from : today;
@@ -2111,23 +2350,25 @@ async function loadShareSetup() { await loadShares(); drawSettings(); }
 let shares = null, shareFilterValue = "all", shareDetailId = null;
 const sharePicked = new Set(); let shareShown = [], sharePickLast = null;  // Auswahl für Mehrfachaktionen (0.1.8)
 const SHARE_DAYS = [["today", "sh.today"], ["1", "sh.tomorrow"], ["7", "sh.d7"], ["30", "sh.d30"], ["60", "sh.d60"], ["90", "sh.d90"], ["365", "sh.y1"], ["0", "sh.unlimitedOpt"], ["until", "sh.untilDate"]];
-const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const isoToday = () => serverDay(new Date());  // «heute» in der Server-Zone (Entscheid 84)
 const shareLive = s => !s.expired && s.active !== false;  // «Aktiv» ohne ausgeschaltete (Entscheid 48)
 function shareValidity(s) {
-  if (s.expired) return t("sh.expiredOn", { date: fmtDate(s.expires_at * 1000) });
+  if (s.expired) return t("sh.expiredOn", { date: fmtDay(s.expires_at * 1000) });
   if (s.active === false) return t("sh.off");
-  if (s.pending) return t("sh.from", { date: fmtDate(s.valid_from * 1000) });
+  if (s.pending) return t("sh.from", { date: fmtDay(s.valid_from * 1000) });
   if (!s.expires_at) return t("sh.unlimited");
-  const end = new Date(s.expires_at * 1000), now = new Date();  // Kalendertage bis zum Ablauftag (Ablauf am Tagesende)
-  const days = Math.round((new Date(end.getFullYear(), end.getMonth(), end.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
-  return days <= 0 ? t("sh.lastDay") : t("sh.left", { n: days, date: fmtDate(s.expires_at * 1000) });
+  // Kalendertage bis zum Ablauftag, beide Tage in der Server-Zone (Ablauf am Tagesende, Entscheid 84)
+  const days = Math.round((Date.parse(serverDay(s.expires_at * 1000)) - Date.parse(serverDay(new Date()))) / 86400000);
+  return days <= 0 ? t("sh.lastDay") : t("sh.left", { n: days, date: fmtDay(s.expires_at * 1000) });
 }
 function shareViews(s) {
   if (!s.views) return t("sh.noViews");
   return t("sh.views", { n: s.views, date: fmtDate(s.last_viewed_at * 1000, { dateStyle: "medium", timeStyle: "short" }) });
 }
-function shareFacts(s) {
-  return [t("sh.created", { date: fmtDate(s.created_at * 1000) }), shareValidity(s), shareViews(s), ...(s.likes ? [t("sh.likes", { n: s.likes })] : []),
+// Liste: Likes nur wenn > 0; Link-Detail: immer «♥ {n} Likes», auch 0 (Entscheid 78)
+function shareFacts(s, detail) {
+  return [t("sh.created", { date: fmtDate(s.created_at * 1000) }), shareValidity(s), shareViews(s),
+          ...(detail ? ["♥ " + t("sh.likes", { n: s.likes || 0 })] : s.likes ? [t("sh.likes", { n: s.likes })] : []),
           ...(s.protected ? [t("sh.protected")] : []), ...(s.download ? [t("sh.download")] : []), ...(s.video ? [t("sh.video")] : []), ...(s.metadata === false ? [t("sh.noMeta")] : [])];
 }
 const factEl = text => el("span", "shareFacts", text);
@@ -2406,7 +2647,8 @@ function drawShareDetail() {
   if (document.activeElement !== $("shWebTitle")) $("shWebTitle").value = s.own_title ? s.title : "";
   $("shWebTitle").placeholder = s.name || "";
   $("shUrl").textContent = s.url || s.path;
-  $("shFacts").replaceChildren(...shareFacts(s).map(factEl));
+  $("shFacts").replaceChildren(...shareFacts(s, true).map(factEl));
+  drawQr($("shQr"), s.url, shareLive(s), s.title);
   $("shActive").checked = s.active !== false; $("shActive").disabled = s.expired;
   $("shPw").checked = s.protected || !$("shPwRow").classList.contains("hidden");
   $("shDl").checked = s.download; $("shMeta").checked = s.metadata !== false; $("shVid").checked = !!s.video;
@@ -2537,29 +2779,51 @@ function drawWelcome() {
   const live = (shares || []).filter(shareLive);
   $("hmTLinks").textContent = fmt(live.length);
   $("hmTViews").textContent = fmt((shares || []).reduce((sum, s) => sum + (s.views || 0), 0));
+  $("hmTLikes").textContent = fmt((shares || []).reduce((sum, s) => sum + (s.likes || 0), 0));  // Entscheid 78
   $("hmTMusic").textContent = fmt(st.tracks.filter(x => x.own).length);
-  const ev = [...st.puzzles.map(p => [p.updated, t("u.logPuzzle", { name: p.name })]),
-              ...(shares || []).map(s => [s.created_at, t("u.logLink", { name: s.title })])]
+  // Jede Zeile öffnet ihr Puzzle bzw. ihren Link (Entscheid 68, B4)
+  const ev = [...st.puzzles.map(p => [p.updated, t("u.logPuzzle", { name: p.name }), () => setPuzzleDetail(p.id)]),
+              ...(shares || []).map(s => [s.created_at, t("u.logLink", { name: s.title }), () => { shareDetailId = s.id; go("P10"); drawShareDetail(); drawShares(); }])]
     .filter(x => x[0]).sort((a, b) => b[0] - a[0]).slice(0, 5);
-  $("hmLog").replaceChildren(...(ev.length ? ev.map(([ts, text]) => { const li = el("li"); li.append(el("span", "t", fmtDate(ts * 1000, { dateStyle: "medium", timeStyle: "short" })), el("span", "", text)); return li; })
+  $("hmLog").replaceChildren(...(ev.length ? ev.map(([ts, text, open]) => {
+      const li = el("li", "hmOpen"), b = el("button"); b.type = "button";
+      b.append(el("span", "t", fmtDate(ts * 1000, { dateStyle: "medium", timeStyle: "short" })), el("span", "", text)); b.onclick = open;
+      li.append(b); return li; })
     : [el("li", "muted", t("u.logNone"))]));
   $("hmVer").textContent = appVersion ? `${t("about.version")} ${appVersion.version}` : "";
 }
-fetch("/api/version").then(r => r.json()).then(v => { appVersion = v; drawWelcome(); drawMotifSources(); }).catch(() => {});
+fetch("/api/version").then(r => r.json()).then(v => { appVersion = v; drawWelcome(); drawMotifSources(); drawAboutSum(); }).catch(() => {});
+// Box «Über»: «<Version> · Immich <Version>», ohne Statuspunkt (Auftrag «Über» vereinheitlichen, 25.11.2026)
+let immichSum = null;
+function drawAboutSum() {
+  const p = $("aboutSum"); if (!p || !appVersion || KIOSK_ADMIN) return;  // Kiosk-Admin behält «Modus: Kiosk»
+  const im = immichSum || { status: "checking" };
+  delete p.dataset.i18n; p.replaceChildren(appVersion.version + (im.version ? ` · Immich ${im.version.replace(/^v/, "")}` : ""));
+  p.title = t({ connected: "immich.connected", checking: "immich.checking", error: "immich.error", off: "immich.off" }[im.status]);
+}
+const KIOSK_ADMIN = document.documentElement.classList.contains("kioskAdmin");
+if (!KIOSK_ADMIN) fetch("/api/immich").then(r => r.json()).then(i => {
+  immichSum = i.ok ? { status: "connected", version: i.version } : { status: i.configured === false ? "off" : "error" }; drawAboutSum();
+}).catch(() => { immichSum = { status: "error" }; drawAboutSum(); });
 // Ohne Immich (IMMICH_URL und IMMICH_API_KEY leer) bleibt im Schritt Motiv nur «Hochladen»
 function drawMotifSources() {
   const off = appVersion && appVersion.immich === false;
   $("imBtn").classList.toggle("hidden", off); $("mkDirect").classList.toggle("hidden", off);
   $("uploadBtn").classList.toggle("primary", off);
-  $("mkNote").dataset.i18n = off ? "u.motifNoteUp" : "u.motifNote"; $("mkNote").textContent = t($("mkNote").dataset.i18n);
+  const col = !!(appVersion && appVersion.collage);  // Entscheid 66: nur mit Collage im Register und SHARES_API_KEY
+  $("colBtn").classList.toggle("hidden", !col);
+  $("mkNote").dataset.i18n = off ? "u.motifNoteUp" : col ? "u.motifNoteCol" : "u.motifNote"; $("mkNote").textContent = t($("mkNote").dataset.i18n);
 }
 
 // ---------- Familien-Umschalter (Entscheid 21, wie Collage): andere Immich-Dienste aus family.json ----------
 let family = { self: null, services: [], openMode: "same" };
-async function loadFamily() {
+async function loadFamily(retry) {
   try { family = await (await fetch("/api/family")).json(); } catch { family = null; }
   if (!family || !Array.isArray(family.services)) family = { self: null, services: [], openMode: "same" };
+  // Entscheid 53: die Versionen der anderen Dienste fragt der Server im Hintergrund ab, darum einmal nachladen
+  if (family.versionsPending && !retry) setTimeout(() => loadFamily(true), 2000);
   $("familyBtn").classList.toggle("hidden", !family.services.length);
+  about.family = family; drawAbout();  // Entscheid 65: Dienste mit Status in «Über»
   drawFamily();
 }
 // Entscheid 44: wie ein anderer Dienst aufgeht (openMode aus Smart Albums); Strg/Cmd/Shift/Mittelklick macht der Browser
@@ -2586,7 +2850,9 @@ function drawFamily() {
     }
     icon.append(letter);
     const text = el("span", "famText");
-    text.append(el("strong", "", s.name));
+    const name = el("strong", "", s.name);
+    if (s.version) { const ver = el("small", "famVer", s.version); ver.title = t("family.version", { version: s.version }); name.append(ver); }  // Entscheid 53
+    text.append(name);
     if (s.claim) { const sub = el("span", "famSub", s.claim); sub.lang = "en"; text.append(sub); }
     const end = el("span");
     if (own) { end.className = "famHere"; end.textContent = t("family.here"); row.setAttribute("aria-current", "page"); }
@@ -2597,12 +2863,202 @@ function drawFamily() {
 }
 loadFamily();
 
+// ---------- Statistik (0.1.30, Entscheide 86–93, 95): Vorlage Smart-Album (stRender), nur diese Marke ----------
+// /api/stats liefert Rohdaten wie /api/internal/shares (Tageswerte in der Zeitzone des Servers) plus today und keep;
+// Zeitraum, Summen und Diagramme rechnet die Seite. Farben: alles var(--accent), Likes #ff5a6e (Entscheid 95).
+let SX = null, sxTip = null;
+const SX_S = { range: "30", from: "", to: "", sort: ["v", "desc"] };
+const SX_LIKE = "#ff5a6e";  // auch im Tooltip (hängt an body, ausserhalb von #sxPane)
+const sxEsc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sxB = n => n >= 1024 ** 3 ? (n / 1024 ** 3).toLocaleString(locale(), { maximumFractionDigits: 1 }) + " GB"
+  : n >= 1024 ** 2 ? fmt(Math.round(n / 1024 ** 2)) + " MB" : fmt(Math.max(0, Math.round(n / 1024))) + " KB";
+const sxDot = c => `<i class="sxDot" style="background:${c}"></i>`;
+// Tage als JJJJ-MM-TT, gerechnet um 12:00 UTC: kein Versatz durch die Zeitzone des Browsers (nie toISOString().slice)
+const sxYmd = x => `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, "0")}-${String(x.getUTCDate()).padStart(2, "0")}`;
+const sxAdd = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return sxYmd(x); };
+const sxDiff = (a, b) => Math.round((new Date(b + "T12:00:00Z") - new Date(a + "T12:00:00Z")) / 864e5);
+const sxDay = (d, o) => new Date(d + "T12:00:00Z").toLocaleDateString(locale(), { timeZone: "UTC", ...o });
+const sxDe = d => sxDay(d, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const sxSum = (o, a, b) => { let n = 0; for (const d in o || {}) if (d >= a && d <= b) n += o[d]; return n; };
+const sxDays = (list, f) => { const o = {}; for (const x of list || []) if (x && x.date) o[x.date] = (o[x.date] || 0) + (+x[f] || 0); return o; };
+function sxTipShow(e, html) {
+  const tp = sxTip; tp.innerHTML = html; tp.style.display = "block";
+  const x = Math.min(e.clientX + 14, innerWidth - tp.offsetWidth - 8), y = e.clientY + 14;
+  tp.style.left = x + "px"; tp.style.top = (y + tp.offsetHeight > innerHeight ? e.clientY - tp.offsetHeight - 10 : y) + "px";
+}
+const sxTipHide = () => { if (sxTip) sxTip.style.display = "none"; };
+const sxSpark = (arr, c) => {
+  const w = 120, h = 26, m = Math.max(1, ...arr);
+  const pts = arr.map((v, i) => `${(i / (arr.length - 1 || 1) * w).toFixed(1)},${(h - 2 - v / m * (h - 4)).toFixed(1)}`).join(" ");
+  return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" style="stroke:${c}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+};
+// Balken mit runder Kappe oben, 2 px Abstand (ab 60 Balken ohne), Hover-Fläche über die ganze Höhe
+function sxBars(box, series, o = {}) {
+  const W = box.clientWidth || 600, H = o.h || 190, pl = 34, pb = 22, pt = 6, iw = W - pl - 4, ih = H - pb - pt, n = series.length;
+  const tot = s => s.parts.reduce((a, q) => a + q.v, 0), max = Math.max(1, ...series.map(tot));
+  const step = (m => { const p = Math.pow(10, Math.floor(Math.log10(m))), f = m / p; return Math.max(1, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p); })(max / 4), nice = step * 4;
+  const gap = n > 60 ? 0 : 2, bw = Math.max(1, iw / n - gap); let g = "", b = "", hit = "";
+  for (let i = 0; i <= 4; i++) { const y = pt + ih - ih * i / 4; g += `<line x1="${pl}" x2="${W - 4}" y1="${y}" y2="${y}" style="stroke:var(--sxGrid)"/><text class="ax" x="${pl - 6}" y="${y + 4}" text-anchor="end">${fmt(Math.round(nice * i / 4))}</text>`; }
+  const every = Math.ceil(n / (W < 500 ? 4 : 7));
+  series.forEach((s, i) => {
+    const x = pl + i * (iw / n) + gap / 2; let y = pt + ih; const last = s.parts.map(q => q.v > 0).lastIndexOf(true);
+    s.parts.forEach((q, j) => {
+      if (!q.v) return; const h = q.v / nice * ih, top = j === last, r = top ? Math.min(4, bw / 2, h) : 0; y -= h; const sep = n <= 60 && !top ? 1 : 0;
+      b += top && r ? `<path d="M${x},${y + h - sep} V${y + r} Q${x},${y} ${x + r},${y} H${x + bw - r} Q${x + bw},${y} ${x + bw},${y + r} V${y + h - sep} Z" style="fill:${q.c}"/>`
+        : `<rect x="${x}" y="${y}" width="${bw}" height="${Math.max(0, h - sep)}" style="fill:${q.c}"/>`;
+    });
+    if (i % every === 0) b += `<text class="ax" x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${sxEsc(s.short)}</text>`;
+    hit += `<rect x="${pl + i * (iw / n)}" y="${pt}" width="${iw / n}" height="${ih}" fill="transparent" data-i="${i}"/>`;
+  });
+  box.innerHTML = `<svg height="${H}" role="img" aria-label="${sxEsc(o.label || "")}">${g}<line x1="${pl}" x2="${W - 4}" y1="${pt + ih}" y2="${pt + ih}" style="stroke:var(--line)"/>${b}${hit}</svg>`;
+  box.querySelectorAll("rect[data-i]").forEach(r => {
+    const s = series[+r.dataset.i];
+    r.onmousemove = e => sxTipShow(e, `<b>${sxEsc(s.long)}</b><div class="r"><span>${sxDot(s.parts[0].c)}${sxEsc(o.unit || "")}</span><b style="margin:0">${fmt(tot(s))}</b></div>`);
+    r.onmouseleave = sxTipHide;
+  });
+}
+function sxSpan() {
+  const today = SX.today; let to = SX_S.to || today, from = SX_S.from;
+  if (!from) {
+    if (SX_S.range === "all") { from = today; for (const l of SX.links) for (const k of ["viewDays", "likeDays"]) for (const d in l[k]) if (d < from) from = d; }
+    else from = sxAdd(to, -(+SX_S.range - 1));
+  }
+  if (from > to) [from, to] = [to, from];
+  const n = sxDiff(from, to) + 1, pto = sxAdd(from, -1); return { from, to, n, pfrom: sxAdd(pto, -(n - 1)), pto };
+}
+// Bis 62 Tage ein Balken pro Tag, darüber pro Monat
+function sxBuckets(sp) {
+  const days = []; for (let d = sp.from; d <= sp.to; d = sxAdd(d, 1)) days.push(d);
+  if (sp.n <= 62) return days.map(d => ({ k: [d], short: sxDay(d, { day: "numeric", month: "numeric" }), long: sxDe(d) }));
+  const m = new Map(); days.forEach(d => { const k = d.slice(0, 7); if (!m.has(k)) m.set(k, []); m.get(k).push(d); });
+  return [...m].map(([k, ds]) => ({ k: ds, short: sxDay(k + "-15", { month: "short" }), long: sxDay(k + "-15", { month: "long", year: "numeric" }) }));
+}
+async function sxLoad() {
+  const r = await api("GET", "/api/stats"), now = Date.now();
+  r.links = (r.shares || []).map(s => ({
+    id: s.id, title: s.title || s.item || "", work: s.work,
+    active: !!s.active && !(s.expires && Date.parse(s.expires) < now) && !(s.validFrom && Date.parse(s.validFrom) > now),
+    dl: !!s.download, pw: !!s.protected, exp: !!s.expires, video: !!s.video, views: +s.views || 0, likes: +s.likes || 0,
+    viewDays: sxDays(s.viewDays, "views"), likeDays: sxDays(s.likeDays, "likes"), downloadDays: sxDays(s.downloadDays, "downloads") }));
+  r.works = (r.works || []).map(w => ({ ...w, day: w.created ? serverDay(w.created) : "" }));
+  SX = r; sxSumBox(); return r;
+}
+// Box «Statistik»: Aufrufe und Likes der letzten 30 Tage (Entscheid 86)
+function sxSumBox() {
+  const p = $("sxSum"); if (!p || !SX) return;
+  const a = sxAdd(SX.today, -29); let v = 0, lk = 0;
+  for (const l of SX.links) { v += sxSum(l.viewDays, a, SX.today); lk += sxSum(l.likeDays, a, SX.today); }
+  delete p.dataset.i18n; p.textContent = t("sx.sum", { views: fmt(v), likes: fmt(lk) });
+}
+async function sxOpen() {
+  if (!sxTip) { sxTip = el("div", "sxTip"); sxTip.setAttribute("translate", "no"); document.body.append(sxTip); }
+  sxCtl();
+  if (SX) sxRender(); else $("sxBody").innerHTML = `<p class="sxEmpty">${sxEsc(t("sx.loading"))}</p>`;
+  try { await sxLoad(); sxCtl(); sxRender(); }  // Filter nach dem Laden nochmals zeichnen (max = heute)
+  catch {
+    $("sxBody").innerHTML = `<p class="sxEmpty">${sxEsc(t("sx.failed"))} <button type="button" id="sxRetry">${sxEsc(t("sx.retry"))}</button></p>`;
+    $("sxRetry").onclick = sxOpen;
+  }
+}
+function sxCtl() {
+  [...$("sxRange").children].forEach(b => { const on = !SX_S.from && !SX_S.to && b.dataset.r === SX_S.range; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+  $("sxFrom").value = SX_S.from; $("sxTo").value = SX_S.to;
+  if (SX) $("sxFrom").max = $("sxTo").max = SX.today;
+}
+function sxInit() {
+  $("sxRange").onclick = e => { const b = e.target.closest("button"); if (!b) return; SX_S.range = b.dataset.r; SX_S.from = SX_S.to = ""; sxCtl(); sxRender(); };
+  $("sxFrom").onchange = e => { SX_S.from = e.target.value; if (SX_S.from && !SX_S.to) SX_S.to = SX ? SX.today : ""; sxCtl(); sxRender(); };
+  $("sxTo").onchange = e => { SX_S.to = e.target.value; if (SX_S.to && !SX_S.from) SX_S.from = sxAdd(SX_S.to, -(+(SX_S.range === "all" ? 30 : SX_S.range) - 1)); sxCtl(); sxRender(); };
+  let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (shown.includes("P34") && SX) sxRender(); }, 150); });
+}
+function sxThMark(sel, k, d) {
+  document.querySelectorAll(sel + " th[data-k]").forEach(x => {
+    if (!x.querySelector(".thS")) x.innerHTML = `<button class="thS" type="button">${x.innerHTML}<span class="thA" aria-hidden="true"></span></button>`;
+    const on = x.dataset.k === k; if (on) x.setAttribute("aria-sort", d > 0 ? "ascending" : "descending"); else x.removeAttribute("aria-sort");
+    x.querySelector(".thA").textContent = on ? (d > 0 ? "▲" : "▼") : "";
+  });
+}
+function sxRender() {
+  if (!SX) return; sxTipHide();
+  const sp = sxSpan(), L = SX.links, W = SX.works, E = sxEsc, allT = SX_S.range === "all" && !SX_S.from;
+  const dlt = (a, b) => {
+    if (allT) return `<span class="d">${E(t("sx.whole"))}</span>`;
+    if (!b) return `<span class="d">${E(t("sx.prev0"))}</span>`;
+    const p = Math.round((a - b) / b * 100);
+    return `<span class="d ${p > 0 ? "up" : p < 0 ? "dn" : ""}">${E(t("sx.delta", { sign: p > 0 ? "▲ +" : p < 0 ? "▼ " : "± ", p: fmt(p) }))}</span>`;
+  };
+  const v = L.reduce((n, l) => n + sxSum(l.viewDays, sp.from, sp.to), 0), pv = L.reduce((n, l) => n + sxSum(l.viewDays, sp.pfrom, sp.pto), 0);
+  const lk = L.reduce((n, l) => n + sxSum(l.likeDays, sp.from, sp.to), 0), plk = L.reduce((n, l) => n + sxSum(l.likeDays, sp.pfrom, sp.pto), 0);
+  const act = L.filter(l => l.active).length, newW = W.filter(w => w.day >= sp.from && w.day <= sp.to).length;
+  const vis = new Set(); L.forEach(l => { for (const d in l.viewDays) if (d >= sp.from && d <= sp.to && l.viewDays[d] > 0) vis.add(d); });
+  const sb = sxBuckets(sp), cnt = (x, src) => L.reduce((n, l) => n + x.k.reduce((a, d) => a + (l[src][d] || 0), 0), 0);
+  const sv = sb.map(x => cnt(x, "viewDays")), sl = sb.map(x => cnt(x, "likeDays"));
+  const T = (val, label, extra) => `<div class="sxTile"><span class="v">${val}</span><span class="l">${E(label)}</span>${extra || ""}</div>`;
+  const leg = (c, n) => `<div class="sxLeg"><span>${sxDot(c)}${E(n)}</span></div>`;
+  const perMonth = sp.n > 62 ? ` <small>${E(t("sx.perMonth"))}</small>` : "";
+  let h = `<h4>${E(t("sx.glance"))} <small>${E(sxDe(sp.from))} – ${E(sxDe(sp.to))}</small></h4><div class="sxTiles">`
+    + T(fmt(W.length), t("sx.works"), `<span class="d">${E(t("sx.newIn", { n: fmt(newW) }))}</span>`)
+    + T(fmt(act), t("sx.active"), `<span class="d">${E(t("sx.linksTotal", { total: fmt(L.length), off: fmt(L.length - act) }))}</span>`)
+    + T(fmt(v), t("sx.views"), dlt(v, pv) + sxSpark(sv, "var(--accent)"))
+    + T(fmt(lk), t("sx.likes"), dlt(lk, plk) + sxSpark(sl, SX_LIKE))
+    + T(fmt(vis.size), t("sx.daysWith"), `<span class="d">${E(t("sx.daysOf", { n: fmt(sp.n), avg: fmt(Math.round(v / Math.max(1, vis.size))) }))}</span>`) + "</div>";
+  if (!v && !lk) h += `<p class="sxEmpty">${E(t("sx.empty"))}</p>`;
+  h += `<div class="sxGrid"><div class="sxCard"><h4>${E(t("sx.perDay"))}${perMonth}</h4>${leg("var(--accent)", t("sx.views"))}<div class="sxChart" id="sxChV"></div></div>`
+    + `<div class="sxCard"><h4>${E(t("sx.weekday"))}</h4>${leg("var(--accent)", t("sx.views"))}<div class="sxChart" id="sxChWd"></div></div></div>`
+    + `<div class="sxGrid"><div class="sxCard"><h4>♥ ${E(t("sx.likesDay"))}${perMonth}</h4>${leg(SX_LIKE, t("sx.likes"))}<div class="sxChart" id="sxChL"></div></div>`
+    + `<div class="sxCard"><h4>${E(t("sx.settings"))} <small>${E(t("sx.active"))}</small></h4><div class="sxMeters" id="sxMet"></div></div></div>`
+    + `<div class="sxCard" style="margin-top:14px"><h4>${E(t("sx.storage"))} <small>${E(t("sx.storageNote"))}</small></h4><div class="sxStor" id="sxStor"></div></div>`
+    + `<h4>${E(t("sx.top"))} <small>${E(t("sx.topNote"))}</small></h4><div class="sxScroll"><table id="sxTop"></table></div>`
+    + `<p class="sxFoot">${E(t("sx.foot", { keep: fmt(SX.keep || 365) }))}</p>`;
+  $("sxBody").innerHTML = h;
+  sxBars($("sxChV"), sb.map((x, i) => ({ short: x.short, long: x.long, parts: [{ c: "var(--accent)", v: sv[i] }] })), { label: t("sx.perDay"), unit: t("sx.views") });
+  sxBars($("sxChL"), sb.map((x, i) => ({ short: x.short, long: x.long, parts: [{ c: SX_LIKE, v: sl[i] }] })), { h: 150, label: t("sx.likesDay"), unit: t("sx.likes") });
+  // Wochentag: Montag zuerst, Namen aus Intl (1.–7. Januar 2024 = Montag bis Sonntag)
+  const wd = [1, 2, 3, 4, 5, 6, 7].map(i => { const d = `2024-01-0${i}`; return { short: sxDay(d, { weekday: "short" }), long: sxDay(d, { weekday: "long" }), parts: [{ c: "var(--accent)", v: 0 }] }; });
+  L.forEach(l => { for (const [d, n] of Object.entries(l.viewDays)) if (d >= sp.from && d <= sp.to) wd[(new Date(d + "T12:00:00Z").getUTCDay() + 6) % 7].parts[0].v += n; });
+  sxBars($("sxChWd"), wd, { label: t("sx.weekday"), unit: t("sx.views") });
+  // Einstellungen der aktiven Links
+  const A = L.filter(l => l.active);
+  const M = (n, f, base) => {
+    const ab = base || A, c = ab.filter(f).length, p = ab.length ? Math.round(c / ab.length * 100) : 0;
+    return `<div class="sxMeter"><div class="top"><span>${E(n)}</span><span>${E(t("sx.ofPct", { c: fmt(c), n: fmt(ab.length), p: fmt(p) }))}</span></div><div class="trk"><span class="fill" style="width:${p}%"></span></div></div>`;
+  };
+  $("sxMet").innerHTML = M(t("sx.mDl"), l => l.dl) + M(t("sx.mPw"), l => l.pw) + M(t("sx.mExp"), l => l.exp) + M(t("sx.mVideo"), l => l.video)
+    + M(t("sx.mLikes"), l => l.likes > 0) + M(t("sx.mDls"), l => sxSum(l.downloadDays, sp.from, sp.to) > 0, A.filter(l => l.dl || l.video));
+  // Speicher (heutiger Stand, vom Server höchstens stündlich gezählt)
+  const S = SX.storage, sized = W.filter(w => w.bytes != null), big = sized.slice().sort((a, b) => b.bytes - a.bytes).slice(0, 5);
+  let head = `<div><div class="big">${S ? sxB(S.bytes) : "–"}</div>`;
+  if (S) head += `<div class="muted">${E(t("sx.files", { n: fmt(S.files || 0) }))}</div>`;
+  if (sized.length) head += `<div class="muted">${E(t("sx.perWork", { size: sxB(sized.reduce((a, w) => a + w.bytes, 0) / sized.length) }))}</div>`;
+  if (S && S.measured) head += `<div class="muted" style="font-size:12px;margin-top:4px">${E(t("sx.asOf", { time: fmtDate(S.measured, { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", timeZone: SERVER_TZ }) }))}</div>`;
+  head += "</div>";
+  const mb = Math.max(1, ...big.map(x => x.bytes));
+  const list = big.length ? `<div class="muted" style="font-size:12px;margin-bottom:2px">${E(t("sx.largest"))}</div>`
+    + big.map(x => `<div class="srow"><span class="t" title="${E(x.title)}">${E(x.title || x.id)}</span><span class="trk"><span class="fill" style="width:${x.bytes / mb * 100}%"></span></span><span class="n">${sxB(x.bytes)}</span></div>`).join("") : "";
+  $("sxStor").innerHTML = head + "<div>" + list + "</div>";
+  // Rangliste der Links, Klick auf eine Spalte sortiert
+  const [sk, dir] = SX_S.sort, sg = dir === "asc" ? 1 : -1;
+  const rows = L.map(l => ({ l, t: l.title, v: sxSum(l.viewDays, sp.from, sp.to), lk: sxSum(l.likeDays, sp.from, sp.to), tot: l.views,
+    last: Object.keys(l.viewDays).filter(d => d <= sp.to).sort().pop() || "" })).filter(r => r.v || r.lk);
+  rows.sort((a, b) => (sk === "t" ? sg * a.t.localeCompare(b.t) : sk === "last" ? sg * a.last.localeCompare(b.last) : sg * (a[sk] - b[sk])) || b.v - a.v);
+  const top = rows.slice(0, 10), mv = Math.max(1, ...top.map(r => r.v));
+  const th = (k, n, c) => `<th data-k="${k}" class="${c || ""}">${E(n)}</th>`;
+  $("sxTop").innerHTML = `<thead><tr>${th("t", t("sx.colLink"))}${th("v", t("sx.views"), "num")}${th("lk", "♥", "num")}${th("tot", t("sx.colTotal"), "num hide-s")}${th("last", t("sx.colLast"), "hide-s")}</tr></thead><tbody>`
+    + (top.length ? top.map(r => `<tr><td class="lnk" title="${E(r.t)}">${E(r.t)}</td><td class="num">${fmt(r.v)}<span class="bar" style="width:${Math.round(r.v / mv * 50)}px"></span></td><td class="num">${fmt(r.lk)}</td><td class="num hide-s">${fmt(r.tot)}</td><td class="hide-s">${r.last ? E(sxDe(r.last)) : E(t("sx.never"))}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="muted">${E(t("sx.empty"))}</td></tr>`) + "</tbody>";
+  $("sxTop").querySelectorAll("th[data-k]").forEach(x => x.onclick = () => { const k = x.dataset.k; SX_S.sort = [k, SX_S.sort[0] === k && SX_S.sort[1] === "desc" ? "asc" : "desc"]; sxRender(); });
+  sxThMark("#sxTop", sk, sg);
+}
+sxInit();
+// Zusammenfassung in der Box gleich beim Laden; ohne Login, im Kiosk für Gäste oder bei Fehlern bleibt der feste Text
+if (window.PUZZLE_MODE !== "kiosk") sxLoad().catch(() => {});
+
 // ---------- Panels: Stapel von links nach rechts (Mockup P2 … P28) ----------
 // Ein Ziel mit Eltern-Panel hängt sich an dessen Kette, sonst ersetzt es den Stapel. Ist der Stapel leer, steht rechts
 // die Vorschau (mit Motiv) oder die Willkommensseite. Die Vorschau steht nur, solange kein Panel der zweiten Ebene offen ist
 // (Roger 21.11.2026, 0.1.4).
-const PARENT = { P31: "P5", P10: "P9", P29: "P9", P13: "P12", P23: "P22", P24: "P2", P25: "P24" };
-const ALIAS = { log: "P30", history: "P22", shares: "P9", share: "P10", settings: "P11", about: "P12", changelog: "P13", other: "P21" };
+const PARENT = { P31: "P5", P10: "P9", P29: "P9", P13: "P12", P23: "P22", P24: "P2", P25: "P24", P32: "P2", P33: "P32" };
+const ALIAS = { log: "P30", history: "P22", shares: "P9", share: "P10", settings: "P11", about: "P12", changelog: "P13", other: "P21", stats: "P34" };
 let stack = [], shown = [], homeY = 0;
 const panelOf = id => document.querySelector(`.mkP[data-pno="${id}"]`);
 const ENTER = {
@@ -2611,9 +3067,11 @@ const ENTER = {
   P29: () => { drawStats(); if (!shares) loadShares(); },
   P11: () => { drawSettings(); loadShareSetup(); drawDefaults(); },
   P12: () => drawImmichStatus(),
+  P34: () => sxOpen(),
   P30: () => loadLog(),
   P13: () => { about.changelogOpen = true; drawChangelog(); drawAbout(); },
   P24: () => loadSources(),
+  P32: () => loadCollages(),
   P19: () => openCrop(),
   P5: () => drawTextHub(),
   P31: () => drawTextPanel(),
@@ -2661,7 +3119,7 @@ function showStack(oldStack, target, from, push) {
 }
 // Offene Panels stehen in der Adresse (#P4/P26): Neu laden bleibt im Panel, Browser vor/zurück geht durch die Panels
 // (Roger 22.11.2026, 0.1.8). Panels, die eine Auswahl brauchen (Link-, Puzzle-, Album-Details), stellt die Adresse nicht wieder her.
-const NO_RESTORE = ["P10", "P23", "P25"];
+const NO_RESTORE = ["P10", "P23", "P25", "P33"];
 let navReady = false;
 function syncUrl() {
   if (!navReady) return;
@@ -2670,7 +3128,8 @@ function syncUrl() {
 }
 function stackFromUrl() {
   const out = [];
-  for (const id of decodeURIComponent(location.hash.slice(1)).split("/").filter(Boolean)) {
+  for (const raw of decodeURIComponent(location.hash.slice(1)).split("/").filter(Boolean)) {
+    const id = ALIAS[raw] || raw;  // #stats öffnet die Statistik (0.1.30)
     if (!panelOf(id) || NO_RESTORE.includes(id) || (id === "P19" && !st.img)) break;
     out.push(id);
   }
@@ -2724,6 +3183,19 @@ function crumbLabel(id) {
   const t = h.querySelector("[data-i18n]:not(.num):not(.tick)");
   return ((t || h).textContent || "").replace(/^\d+\s*/, "").replace(/\s*✓\s*$/, "").trim() || id;
 }
+// Spalten wie Mosaik (fitColumns in common.js): das neueste Panel steht rechts, was keinen Platz mehr hat, verschwindet
+// links und bleibt über die Brotkrumen erreichbar. Vorher lag die dritte Spalte unter ca. 1900 px ausserhalb (0.1.25)
+function fitPanels() {
+  const page = document.documentElement.clientWidth, wide = id => id === "previewPane" || id === "welcomePane";
+  const ids = ["left", ...shown.map(id => panelOf(id).id)];
+  const width = Object.fromEntries(ids.map(id => [id, id === "left" ? Math.min(380, Math.max(300, page * 0.32)) : id === "welcomePane" ? 680 : wide(id) ? 620 : 480]));
+  // wie fitColumns, aber ohne den rechten Rand von main: Startspalte + zwei Panels passen so wie bisher schon ab 1400 px
+  const narrow = matchMedia("(max-width:860px)").matches;
+  let used = 20 + width[ids[ids.length - 1]], first = ids.length - 1;
+  while (first > 0 && used + 16 + width[ids[first - 1]] <= page) { first--; used += 16 + width[ids[first]]; }
+  ids.forEach((id, i) => $(id).classList.toggle("offLeft", !narrow && i < first));
+}
+addEventListener("resize", () => fitPanels());
 function drawPanels() {
   const y0 = scrollY;  // vor dem Umschalten lesen: ein eingeblendetes Panel verschiebt sonst die Scrollposition
   const next = stack.slice();
@@ -2760,11 +3232,13 @@ function drawPanels() {
     p.classList.add("pzIn"); p.classList.toggle("fromL", slideIn.back); slideIn = null;
     setTimeout(() => p.classList.remove("pzIn", "fromL"), 300);
   }
-  document.querySelectorAll(".paneBtn[data-go]").forEach(b => { const on = stack.includes(b.dataset.go); b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+  // Zwei [>] führen ins selbe Panel P31 (Schriftzug): offen ist nur das des gewählten Schriftzugs (Roger 23.11.2026, 0.1.20)
+  document.querySelectorAll(".paneBtn[data-go]").forEach(b => { const on = stack.includes(b.dataset.go) && (!b.dataset.tx || b.dataset.tx === st.tx); b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
   $("familyBtn").classList.toggle("on", stack.includes("P21")); $("familyBtn").setAttribute("aria-pressed", String(stack.includes("P21")));
   for (const id of shown) if (!before.includes(id) && ENTER[id]) ENTER[id]();
   drawCrumbs([{ id: "HOME", label: "Puzzle" }, ...stack.map(id => ({ id, label: crumbLabel(id) }))], id => go(id));
   setBarH(); setPaneTop();
+  fitPanels();
   if (top && !matchMedia("(max-width:860px)").matches) { const p = panelOf(top); requestAnimationFrame(() => p.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" })); }
 }
 function setBarH() { const h = document.querySelector("header"); document.documentElement.style.setProperty("--barH", (document.body.classList.contains("deep") ? h.offsetHeight : h.offsetTop + h.offsetHeight) + "px"); }
@@ -2800,7 +3274,7 @@ document.addEventListener("keydown", e => {
 // ---------- Start ----------
 let wasPhone = matchMedia("(max-width:860px)").matches;  // Handy ↔ Computer: Startseite mit oder ohne Vorschau
 window.addEventListener("resize", () => { setBarH(); const ph = matchMedia("(max-width:860px)").matches; if (ph !== wasPhone) { wasPhone = ph; drawPanels(); } if (P.cfg && shown.includes("P8")) { P.resize(); drawChart(); } if (shown.includes("P31")) drawTextPanel(); });
-onLang(() => { drawControls(); drawInfo(); drawPuzzles(); drawFamily(); drawState(); if (st.link) drawLink(); drawChart(); drawSources(); if (shares) drawShares(); drawWelcome(); if (shown.includes("P29")) drawStats(); drawPanels(); if (shown.includes("P19")) drawCrop(); if (shown.includes("P4")) drawTempo(); });
+onLang(() => { drawControls(); drawInfo(); drawPuzzles(); drawFamily(); drawState(); if (st.link) drawLink(); drawChart(); drawSources(); if (shares) drawShares(); drawWelcome(); if (shown.includes("P29")) drawStats(); sxSumBox(); if (shown.includes("P34")) sxRender(); drawPanels(); if (shown.includes("P19")) drawCrop(); if (shown.includes("P4")) drawTempo(); });
 applyI18n();
 const startId = new URLSearchParams(location.search).get("id");  // vor resetEditor lesen, das die Adresse leert: sonst verlor Neuladen das Puzzle
 resetEditor();
@@ -2815,5 +3289,6 @@ drawPanels();
   navReady = true;
 })();
 </script>
+<div id="txZoom" class="txZoom hidden" role="dialog" aria-modal="true"></div>
 </body>
 </html>

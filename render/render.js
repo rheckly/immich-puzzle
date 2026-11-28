@@ -9,7 +9,7 @@
 // statt im Browser, Bild für Bild (draw(t) hängt nur von t ab). ffmpeg schreibt H.264 und mischt die Musik dazu.
 // Eins nach dem anderen: nie zwei Videos gleichzeitig. Löschen macht die App (mit dem Puzzle, 24-h-Job).
 "use strict";
-const fs = require("fs"), path = require("path"), vm = require("vm"), { spawn } = require("child_process");
+const fs = require("fs"), path = require("path"), vm = require("vm"), { spawn, spawnSync } = require("child_process");
 const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 
 const env = (k, d) => process.env[k] || d, num = (k, d) => { const v = Number(process.env[k]); return Number.isFinite(v) && v > 0 ? v : d; };
@@ -19,6 +19,7 @@ const ENGINE_DIR = env("ENGINE_DIR", path.join(__dirname, "engine"));
 const FPS = num("RENDER_FPS", 30), SHORT = num("RENDER_SIZE", 1080);  // kurze Seite in Pixeln: 1080 = Full HD
 const POLL = num("RENDER_POLL_SECONDS", 10), DEBOUNCE = num("RENDER_DEBOUNCE_SECONDS", 60);
 const TIMEOUT = num("RENDER_TIMEOUT_MINUTES", 15) * 60000, TRIES = num("RENDER_TRIES", 2), MAX_T = 90;
+const MAX_VIDEO = 300;  // mit «Musik nach dem Puzzle weiterlaufen lassen» höchstens 5 Minuten Video
 const QUEUE = path.join(RENDER_DIR, "queue"), VIDEOS = path.join(RENDER_DIR, "videos");
 const PID = /^[A-Za-z0-9_-]{8,64}$/;
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -28,7 +29,7 @@ globalThis.window = { devicePixelRatio: 1 };
 globalThis.document = { currentScript: null, fonts: null, head: { appendChild() {} },
   createElement: tag => tag === "canvas" ? createCanvas(1, 1) : { textContent: "" } };
 vm.runInThisContext(fs.readFileSync(path.join(ENGINE_DIR, "puzzle-engine.js"), "utf8") +
-  "\nglobalThis.Puzzle = Puzzle; globalThis.puzzleConfig = puzzleConfig;", { filename: "puzzle-engine.js" });
+  "\nglobalThis.Puzzle = Puzzle; globalThis.puzzleConfig = puzzleConfig; globalThis.musicEnd = musicEnd;", { filename: "puzzle-engine.js" });
 
 // Schriften: die 13 Collage-Schriften wie im Browser; die Systemschriften (Segoe Script, Georgia, Impact …) gibt es
 // unter Linux nicht, darum freie Ersatzschriften unter deren Namen (Roger 23.11.2026: «freie Ersatzschriften ok»)
@@ -110,6 +111,15 @@ function inside(root, rel) {
   try { real = fs.realpathSync(p); } catch (e) { return null; }
   return real.startsWith(r + path.sep) && fs.statSync(real).isFile() ? real : null;
 }
+// Länge der Musik in Sekunden (ffprobe), 0 wenn unbekannt
+function musicSeconds(file) {
+  try {
+    const r = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file],
+      { encoding: "utf8", timeout: 20000 });
+    const d = parseFloat(r.stdout);
+    return isFinite(d) && d > 0 ? d : 0;
+  } catch (e) { return 0; }
+}
 function musicFile(m) {
   if (!m || !m.path) return null;
   return inside(m.src === "up" ? UPLOAD_MUSIC_DIR : m.src === "lib" ? MUSIC_DIR : "", m.path);
@@ -127,19 +137,22 @@ async function render(pid, job, progress) {
   const ov = createCanvas(W, H), inset = overlay(ov.getContext("2d"), job, W, H);
   P.inset = inset;
   P.setup(puzzleConfig(cfg0, img));
-  const frames = Math.round(T * FPS) + 1;
-  const music = musicFile(job.music), args = ["-hide_banner", "-loglevel", "error", "-y",
+  const music = musicFile(job.music);
+  // Musik nach dem Puzzle weiterlaufen lassen (Standard): fertiges Bild bleibt stehen, bis die Musik aufhört
+  const V = music ? Math.min(MAX_VIDEO, musicEnd(T, musicSeconds(music), job.music.tail !== false)) : T;
+  const frames = Math.round(V * FPS) + 1, puzzleFrames = Math.round(T * FPS) + 1;
+  const args = ["-hide_banner", "-loglevel", "error", "-y",
     "-f", "rawvideo", "-pix_fmt", "rgba", "-s", `${W}x${H}`, "-r", String(FPS), "-i", "pipe:0"];
   if (music) args.push("-i", music);
   args.push("-map", "0:v");
   if (music) {
     const vol = clamp(Number(job.music.volume ?? .8), 0, 1), af = [`volume=${vol.toFixed(3)}`];
-    if (job.music.fade && T > 3) af.push(`afade=t=out:st=${(T - 3).toFixed(3)}:d=3`);  // wie musicVolume(): letzte 3 s leiser
+    if (job.music.fade && V > 3) af.push(`afade=t=out:st=${(V - 3).toFixed(3)}:d=3`);  // wie musicVolume(): letzte 3 s leiser
     args.push("-map", "1:a", "-af", af.join(","), "-c:a", "aac", "-b:a", "128k");
   }
   const tmp = path.join(VIDEOS, pid + ".mp4.tmp");
   args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-threads", "2",
-    "-movflags", "+faststart", "-t", T.toFixed(3), "-f", "mp4", tmp);
+    "-movflags", "+faststart", "-t", V.toFixed(3), "-f", "mp4", tmp);
   const ff = spawn("ffmpeg", args, { stdio: ["pipe", "ignore", "pipe"] });
   let err = "", exited = null;
   ff.stderr.on("data", d => { err = (err + d).slice(-2000); });
@@ -150,8 +163,10 @@ async function render(pid, job, progress) {
     for (let i = 0; i < frames; i++) {
       if (exited !== null) throw new Error("ffmpeg: " + (err.trim() || "beendet " + exited));
       if (Date.now() - started > TIMEOUT) throw new Error("Zeitlimit");
-      P.draw(Math.min(T, i / FPS));
-      if (inset.top || inset.bottom) { P.g.setTransform(1, 0, 0, 1, 0, 0); P.g.drawImage(ov, 0, 0); }
+      if (i < puzzleFrames) {  // danach bleibt das fertige Bild im Canvas stehen
+        P.draw(Math.min(T, i / FPS));
+        if (inset.top || inset.bottom) { P.g.setTransform(1, 0, 0, 1, 0, 0); P.g.drawImage(ov, 0, 0); }
+      }
       if (!ff.stdin.write(cv.data())) await new Promise(ok => ff.stdin.once("drain", ok));
       if (i % (FPS * 2) === 0) progress(Math.round(i / frames * 100));
     }
@@ -161,7 +176,7 @@ async function render(pid, job, progress) {
   } catch (e) {
     ff.kill("SIGKILL"); await done; rm(tmp); throw e;
   }
-  return { tmp, W, H, T, frames, sec: (Date.now() - started) / 1000 };
+  return { tmp, W, H, T: V, frames, sec: (Date.now() - started) / 1000 };
 }
 
 // ---------- Warteschlange ----------

@@ -1,3 +1,70 @@
+## 0.1.30 – 2026-11-25
+- `NEW` Statistik (Entscheide 86–93, 95): Box «Statistik» über «Über» mit «N Aufrufe · N ♥ · 30 Tage», Panel mit Zeitraum (7 Tage, 30 Tage, 12 Monate, Alles, von–bis), Kacheln (Puzzles, aktive Links, Aufrufe und Likes mit Vergleich zur Vorperiode, Tage mit Aufrufen), Aufrufe und Likes pro Tag, Aufrufe nach Wochentag, Einstellungen der Links, Speicher mit den fünf grössten Puzzles und den zehn meistgesehenen Links; Farbe `--accent`, Likes #ff5a6e
+  - `GET /api/stats` mit dem normalen Login: dieselben Daten wie `/api/internal/shares`, dazu `today` und `keep`
+  - Shares-API: neu `works` (alle Puzzles, auch ohne Link, mit `video` und `bytes`), `storage` (Bytes, Dateien, Stand; höchstens stündlich gezählt) und je Link `work`, `downloads`, `downloadDays`
+  - Downloads über den Live-Link (Foto und Video) zählen wie Aufrufe: ohne Bots, einmal pro Besucher und halbe Stunde, Tage in der Zeitzone des Servers, ohne IP
+- `CHG` «Über» wie in allen Marken: Box ohne Statuspunkt («<Version> · Immich <Version>»), im Panel kein Untertitel «Puzzle» und kein «(diese App)» beim eigenen Dienst
+- `CHG` «Über» mit den Abschnitten «Herkunft» (Projekt: Original) und «Lizenzen» zwischen Dienste und Changelog; Lizenzen: Puzzle (AGPL-3.0) und die mitgelieferten Komponenten mit ihrer Lizenz (Entscheid 98)
+- `NEW` Kiosk für Suchmaschinen (Checkliste öffentliche Website): `/robots.txt` (Startseite erlaubt; Bearbeitungslinks, API, Anmeldung, Admin und Spiel-Links gesperrt; Verweis auf die Sitemap) und `/sitemap.xml` mit Startseite und Datenschutz
+  - Startseite mit Titel «Puzzle · Turn your photo into a puzzle» (im Browser danach in der gewählten Sprache), Beschreibung und canonical; Datenschutz mit Beschreibung und canonical auf `/datenschutz`
+  - Bearbeitungslinks `/edit/<id>` mit `noindex`; Spiel-Links hatten es schon
+- `FIX` «Über»: «Erstellt» zeigt Datum und Uhrzeit in der Zeitzone des Servers (Entscheid 27)
+
+## 0.1.29 – 2026-11-25
+- `CHG` Eingabefelder wie Entscheid 85: auch das URL-Feld «Erstellt mit» bekommt Hintergrund, Rand und Radius der übrigen Felder; Farbwähler mit `--bg`, Rand `--line`, Radius 5 px (Entscheid 94)
+
+## 0.1.28 – 2026-11-25
+- `CHG` Pfeilkette über der Vorschau: offene Schritte neutral (Fläche `--line`, Text `--text`) statt rot, erledigte und beim Standard gelassene mit ✓ in `--ok`, der nächste in `--accent`; auch die Häkchen in den Box-Titeln sind wieder sichtbar (Entscheid 72)
+- `CHG` Startseite «Zuletzt»: Jede Zeile öffnet ihr Puzzle bzw. ihren Link (Entscheid 68)
+- `CHG` Abgewählte Schritte in «Puzzle Details» nehmen die Werte des Standards an, damit «Standard» auch gilt; «‹ Vorheriger» / «Nächster ›» überspringen weiterhin keine Schritte (Entscheid 69)
+- `CHG` Box «Über» zeigt den Zustand: «● 0.1.28 · Immich <Version>», Punkt in der Statusfarbe (Entscheid 75)
+- `CHG` Einstellungen in fester Reihenfolge: Standard für neue Puzzles, Video-Download, Erstellt mit, Adresse der Live-Links, ntfy (Entscheid 76)
+- `CHG` Neue Links sind vorgewählt 7 statt 30 Tage gültig (T2, Entscheid 38)
+- `LNG` «Metadaten anzeigen (Datum, Ort)» statt «zeigen»; im Protokoll «Metadaten an/aus» statt «Infos an/aus» (T5)
+- `LNG` Englisch mit “…” statt «…»
+- `NEW` Likes überall sichtbar (Entscheid 78, Vorlage für alle Marken): Startseite «Auf einen Blick» mit Kachel «♥ Likes» (Summe aller Links, öffnet «Geteilte Puzzles»), Protokoll «Like gesetzt» / «Like zurückgenommen» mit Wer «Besucher» (ohne Kennung und IP), Link-Details immer «♥ {n} Likes» auch bei 0, Shares-API liefert je Link `likes` und `likeDays` (gesetzte Likes pro Tag, Entscheid 79)
+- `CHG` Startseite: Das Panel «Willkommen» ist 680 statt 620 px breit, die fünf Kacheln von «Auf einen Blick» stehen gleich breit in einer Zeile, auf dem Handy kleiner (Entscheid 81, Vorlage für alle Marken)
+- `NEW` QR-Code bei jedem geteilten Link: Abschnitt «QR-Code» in den Link-Details und beim Teilen, weiss, 180 px, lokal erzeugt, «QR-Code herunterladen» als SVG; abgelaufen oder ausgeschaltet grau mit Hinweis (Entscheid 80). Der Code liegt neu in `qr.js`
+- `FIX` Ablaufdaten in der Zeitzone des Servers (Entscheid 84): «Gültig bis», «Gültig ab», «noch n Tage», die Datumsfelder und «heute» rechnen in derselben Zone wie die Prüfung beim Aufruf (bis 23:59:59, live Europe/Zurich), nicht in der des Browsers; der Server gibt sie als `<meta name="tz">` mit. Bestehende Links bleiben unverändert
+- `CHG` Startseite auf dem Handy: Kachel-Beschriftungen trennen mit Bindestrich (`hyphens:auto`) statt mitten im Wort umzubrechen, `max-width:100%` hält auch ein überlanges Wort in der Kachel (Entscheid 83)
+- `CHG` Kiosk, Schritt «Gestalten»: Die Vorschau zeigt zuerst das fertige Bild mit dem Schriftzug, ohne Teile; jede Änderung (Gruss, Schrift, Farbe, Anzahl Teile, Form …) erscheint sofort, ohne auf die Animation zu warten. «▶ Abspielen» startet die Animation, die nächste Änderung springt wieder auf das stehende Bild
+- `CHG` Kiosk, Schritt «Gestalten»: Im «Erweitert» beim Gruss lässt sich neben Schrift und Farbe jetzt auch die Position des Schriftzugs (dieselben neun Felder wie in der App) und die Schriftgrösse (Slider 50–200 %, Standard 100 %) wählen; die stehende Vorschau zeigt beides sofort, die Grösse schon beim Ziehen
+
+## 0.1.27 – 2026-11-25
+- `CHG` Collage-Details: unten «Abbrechen» führt zurück zu «Collage wählen»
+
+## 0.1.26 – 2026-11-25
+- `CHG` «Collage wählen»: Mit der Maus zeigt jede Zeile beim Überfahren Handzeiger und Akzentrand wie die Boxen, ein Klick irgendwo in die Zeile (auch aufs Vorschaubild) öffnet die Collage
+
+## 0.1.25 – 2026-11-25
+- `NEW` Motiv aus Collage: In «2 Motiv auswählen» gibt es neben «Hochladen» und «Aus Immich» den Knopf «Aus Collage» (nur wenn Collage in der Familie aktiv ist und SHARES_API_KEY gesetzt ist). «Collage wählen» listet die fertigen Collagen mit Suche, ein Klick öffnet rechts die Collage gross mit Erstellt, Fotos, Vorlage, Format und Grösse. «Als Motiv verwenden» übernimmt das Bild als eigene Kopie, «In Collage öffnen» und «+ Collage» öffnen Collage in einem neuen Tab (Entscheid 66)
+  - Puzzle holt Liste und Bilder über das eigene Backend (`/api/collages…`), der Schlüssel bleibt auf dem Server
+  - Ist Collage nicht erreichbar, lehnt den Schlüssel ab oder bietet die Liste noch nicht an, zeigt das Panel einen Hinweis
+  - Schnittstelle nach Collage 0.10.0: Ist eine Collage beim Übernehmen nicht mehr da (wird z. B. gerade neu gezeichnet), meldet Puzzle «nicht mehr verfügbar» und lädt die Liste neu; leere Vorlage oder leeres Format werden weggelassen
+  - Kiosk ohne Collage (Roger 25.11.2026)
+- `FIX` Dritte Spalte unter ca. 1900 px ausserhalb des Fensters: Wie in Mosaik bleibt das neueste Panel rechts sichtbar, ältere Spalten verschwinden links und bleiben über die Brotkrumen erreichbar
+
+## 0.1.24 – 2026-11-25
+- `NEW` «Über» zeigt unter Immich alle aktivierten Dienste der Familie mit Version und Statuspunkt: grün erreichbar, rot nicht erreichbar, grau wird geprüft; Puzzle selbst immer grün mit «(diese App)». Reihenfolge wie im Register, ohne Register nur Immich (Entscheid 65)
+- `CHG` Familie: family.py byte-gleich aus Mosaik übernommen (liefert je Dienst `status`), Tests dazu übernommen
+
+## 0.1.23 – 2026-11-24
+- `FIX` Panels liessen sich nicht mehr öffnen und «Etwas anderes» fehlte auf «Was möchtest du heute erstellen?»: Der Klick-Handler für die vergrösserte Schriftzug-Vorschau aus 0.1.21 brach das Skript beim Laden ab. Der Handler hängt jetzt am Dokument
+
+## 0.1.22 – 2026-11-24
+- `CHG` Familie: family.py byte-gleich aus Mosaik 0.5.20 übernommen. «Etwas anderes» zeigt hinter jedem Dienst seine Version, wie Mosaik 0.5.19 (Entscheid 53)
+
+## 0.1.21 – 2026-11-24
+- `NEW` Musik: Neuer Schalter «Musik nach dem Puzzle weiterlaufen lassen» (Standard an, auch für bestehende Puzzles). Die Musik spielt nach dem fertigen Puzzle weiter, bis das Stück zu Ende ist; «Ausblenden am Ende» blendet dann am Ende des Stücks aus. Gilt für die Vorschau, die Empfängerseite und das Video
+  - Video: Das fertige Bild bleibt stehen, bis die Musik aufhört, höchstens 5 Minuten; bestehende Videos mit Musik werden einmal neu erstellt
+- `NEW` Schriftzug: Klick auf die Vorschau zeigt sie gross über dem ganzen Fenster; ein Klick oder Esc schliesst sie wieder
+
+## 0.1.20 – 2026-11-23
+- `FIX` Schriftzug: Von den zwei Boxen «Grussbotschaft auf dem leeren Puzzle» und «… auf dem fertigen Puzzle» ist nur die geöffnete als offen markiert, nicht beide
+- `CHG` Kiosk: Hinweis zum Bearbeitungslink lautet «Speichere diesen Link. Nur damit kannst du dein Puzzle innerhalb der nächsten 7 Tage ändern oder löschen.» statt «später»
+- `CHG` Kiosk: Hinweis unter «Website-Titel» lautet «Steht als Überschrift auf deiner Gruss-Seite und in der Vorschau beim Teilen (WhatsApp, Mail). Später noch änderbar.»
+- `CHG` Kiosk, Schritt «Gestalten»: «Gruss auf dem Puzzle» steht zuoberst, gleich darunter ein eigenes «Erweitert» mit Schrift und Schriftfarbe; danach Vorschau, Anzahl Teile, Gesamtzeit und das untere «Erweitert» (ohne Schrift)
+
 ## 0.1.19 – 2026-11-23
 - `CHG` README und Vorlagen für das Release nachgeführt: Video-Download (Render-Dienst, `RENDER_SIZE`), Meldungen über ntfy, klassische Teile, Kiosk in drei Schritten, `PUID`/`PGID` und Kiosk-Ports in der Tabelle aller Einstellungen; «Es wird kein Video gerendert» in der Einleitung korrigiert
   - `compose.kiosk.yaml`: Kiosk und Renderer auf dieselbe Version 0.1.19 (vorher Kiosk 0.1.9, Renderer 0.1.17); `.env.example` mit `NTFY_*` und `RENDER_SIZE`

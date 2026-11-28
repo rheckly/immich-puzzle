@@ -94,15 +94,23 @@ html.kFlow .stepRow > button:disabled { opacity:.5; cursor:not-allowed; }
 /* 1 Foto: gewähltes Foto gross */
 #motifBody > #motifNow { flex-direction:column; align-items:stretch; margin:0 0 12px; }
 #motifBody > #motifNow img { width:100%; height:auto; max-height:45vh; object-fit:contain; background:var(--bg); border-radius:8px; }
-/* 2 Gestalten: Vorschau rechts (Handy oben), Einstellungen links */
+/* 2 Gestalten: Gruss oben, Vorschau rechts (Handy unter dem Gruss), Einstellungen links */
 .kGest { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:18px; align-items:start; }
 .kGest .kPv { position:sticky; top:0; }
 .kGest .kPv .player { margin-top:8px; }
 .kCtl > .lbl:first-child { margin-top:0; }
+.kGest > .kTop { grid-column:1 / -1; }  /* Gruss und seine Schrift zuoberst, über Vorschau und Einstellungen */
+.kMore.kMoreTxt { margin-top:6px; }
+/* Stehende Vorschau: Play-Knopf unten rechts, damit er den Schriftzug nicht verdeckt */
+.kPlayBig { position:absolute; right:12px; bottom:12px; margin:0; padding:10px 22px; border-radius:999px;
+  border:0; background:rgba(0,0,0,.6); color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+.kPlayBig::before { content:"▶ "; }
+.kPlayBig:hover { background:rgba(0,0,0,.78); }
+.kPlayBig[hidden] { display:none; }
 .kCtl textarea { width:100%; box-sizing:border-box; font:inherit; }
 @media (max-width:860px) {
   .kGest { grid-template-columns:1fr; gap:12px; }
-  .kGest .kPv { order:-1; position:static; }
+  .kGest > .kTop { order:-2; } .kGest .kPv { order:-1; position:static; }
   .kGest .kPv .tableWrap { aspect-ratio:4/3 !important; }
 }
 .kMore { margin-top:14px; border-top:1px solid var(--line); padding-top:8px; }

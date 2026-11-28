@@ -315,7 +315,7 @@ class Videos:
 
     # ---------- Auftrag ----------
     def _music(self, cfg):
-        """Musik als {src, path, volume, fade}; path relativ zum Musikordner. Unbekannte oder fehlende Musik: keine."""
+        """Musik als {src, path, volume, fade, tail}; path relativ zum Musikordner. Unbekannte oder fehlende Musik: keine."""
         m = cfg.get("music")
         if not isinstance(m, dict):
             return None, ""
@@ -331,8 +331,10 @@ class Videos:
         if not full.startswith(base + os.sep) or not os.path.isfile(full):
             return None, ""
         st = os.stat(full)
-        return ({"src": src, "path": rel.replace("\\", "/"), "volume": m.get("volume", .8), "fade": m.get("fade", True)},
-                f"{mid}:{st.st_size}:{int(st.st_mtime)}")
+        tail = bool(m.get("tail", True))  # «Musik nach dem Puzzle weiterlaufen lassen»
+        return ({"src": src, "path": rel.replace("\\", "/"), "volume": m.get("volume", .8), "fade": m.get("fade", True),
+                 "tail": tail},
+                f"{mid}:{st.st_size}:{int(st.st_mtime)}" + (":tail" if tail else ""))
 
     def job(self, pid, p, folder, info):
         """Auftrag zu einem Puzzle. info: title, by, meta (oder None), kiosk, made_with_text, copyright, year, lang."""

@@ -16,6 +16,13 @@ Anmeldesperre (Entscheid 33): FamilyLockout zählt Fehlversuche pro IP gemeinsam
 /family-state/login-fails.json (FAMILY_STATE_DIR); nach 5 Fehlversuchen 5 Minuten gesperrt. Format: docs/family-lockout.md.
 Einstellungen (Entscheid 44): FamilySettings liest /family-state/family-settings.json ({"version": 1, "openMode": …}), wie
 «Andere Dienste» öffnen (same, tab, window). Alle Dienste lesen, nur Smart Albums schreibt. Format: docs/family-settings.md.
+Versionen (Entscheid 53): Versions fragt für jeden anderen aktiven Dienst GET <url>/health ab ({"ok": true, "version": "x.y.z"}),
+parallel im Hintergrund, Timeout 1,5 s, Ergebnis 60 s im Speicher. GET /api/family wartet nie darauf: was noch fehlt, steht
+ohne "version" da und "versionsPending": true sagt dem Panel, dass es einmal nachladen kann. Die eigene Version gibt der Dienst
+selbst mit (Register(..., own_version=...)), ohne HTTP. Ohne Antwort oder ohne Feld: keine Version, kein Fehler.
+Status (Entscheid 65): dieselbe Abfrage sagt auch, ob der Dienst erreichbar ist. Antwortet /health mit 200 und gültigem JSON,
+gilt er als erreichbar, auch ohne Feld "version". view() gibt je Dienst "status": "ok" oder "down"; fehlt das Feld, läuft
+die erste Prüfung noch. Der eigene Dienst ist immer "ok". Kein zusätzlicher HTTP-Aufruf, Timeout und TTL wie oben.
 Nur Standardbibliothek, damit die anderen Dienste den Teil 1:1 übernehmen können.
 """
 import hashlib
@@ -28,6 +35,7 @@ import secrets
 import threading
 import time
 import urllib.parse
+import urllib.request
 
 COOKIE = "family_session"
 VERSION = "v1"
@@ -86,24 +94,114 @@ def load_register(path):
 
 
 class Register:
-    def __init__(self, path, own_id, settings=None):
+    def __init__(self, path, own_id, settings=None, own_version=None, versions=None):
         self.path = path
         self.own_id = own_id
         self.settings = settings  # FamilySettings oder None (dann gilt OPEN_MODE_DEFAULT)
+        self.own_version = own_version  # Eigene Version (aus dem Changelog des Dienstes) oder None
+        self.versions = versions  # Versions oder None (dann keine Versionen der anderen Dienste)
 
     @classmethod
-    def from_env(cls):
+    def from_env(cls, own_version=None):
         return cls(os.environ.get("FAMILY_FILE", "/family/family.json"), (os.environ.get("FAMILY_ID") or "mosaik").strip(),
-                   FamilySettings.from_env())
+                   FamilySettings.from_env(), own_version, Versions())
 
     def view(self):
         """Für GET /api/family. Kein Umschalter, wenn ausser dem eigenen Dienst keiner aktiv ist.
-        openMode (Entscheid 44): wie das Frontend die anderen Dienste öffnet, aus family-settings.json."""
+        openMode (Entscheid 44): wie das Frontend die anderen Dienste öffnet, aus family-settings.json.
+        version (Entscheid 53): je Dienst, wenn bekannt; versionsPending, solange noch eine Abfrage läuft.
+        status (Entscheid 65): je Dienst "ok" oder "down", sobald eine Prüfung vorliegt; der eigene Dienst immer "ok"."""
         services = load_register(self.path)
         if not any(s["id"] != self.own_id for s in services):
             services = []
         mode = self.settings.read()["openMode"] if self.settings else OPEN_MODE_DEFAULT
-        return {"self": self.own_id, "services": services, "openMode": mode}
+        out = {"self": self.own_id, "services": services, "openMode": mode}
+        others = [s["url"] for s in services if s["id"] != self.own_id]
+        known, pending = self.versions.get(others) if self.versions and others else ({}, False)
+        reachable = self.versions.reachable(others) if self.versions and others else {}
+        for s in services:
+            own = s["id"] == self.own_id
+            version = self.own_version if own else known.get(s["url"])
+            if version:
+                s["version"] = version
+            up = True if own else reachable.get(s["url"])
+            if up is not None:
+                s["status"] = "ok" if up else "down"
+        if pending:
+            out["versionsPending"] = True
+        return out
+
+
+# ---------- Versionen der anderen Dienste (Entscheid 53) ----------
+
+VERSION_TIMEOUT = 1.5  # Sekunden je Abfrage
+VERSION_TTL = 60  # Sekunden im Speicher
+VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$")
+
+
+def fetch_health(url, timeout=VERSION_TIMEOUT):
+    """(erreichbar, Version) aus GET <url>/health ({"ok": true, "version": "x.y.z"}). Erreichbar heisst 200 mit gültigem
+    JSON, auch ohne Feld version. Version ist None, wenn sie fehlt oder ungültig ist. Fällt nie."""
+    try:
+        req = urllib.request.Request(url + "/health", headers={"Accept": "application/json", "User-Agent": "immich-family"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return False, None
+            data = json.loads(resp.read(4096).decode("utf-8"))
+    except Exception:
+        return False, None
+    version = data.get("version") if isinstance(data, dict) else None
+    version = version.strip() if isinstance(version, str) else ""
+    return True, (version if VERSION_RE.match(version) else None)
+
+
+def fetch_version(url, timeout=VERSION_TIMEOUT):
+    """Nur die Version aus GET <url>/health, sonst None. Fällt nie."""
+    return fetch_health(url, timeout)[1]
+
+
+class Versions:
+    """Versionen je Adresse, VERSION_TTL Sekunden im Speicher. get() wartet nie: was fehlt oder abgelaufen ist, holt je ein
+    Hintergrund-Thread (alle parallel). Bis dahin gilt der alte Wert, falls es einen gibt.
+    fetch liefert (erreichbar, Version) wie fetch_health; ein einzelner Wert gilt als Version (erreichbar, wenn nicht None)."""
+
+    def __init__(self, fetch=fetch_health, ttl=VERSION_TTL):
+        self.fetch = fetch
+        self.ttl = ttl
+        self._lock = threading.Lock()
+        self._cache = {}  # url -> (Zeitpunkt, Version oder None, erreichbar)
+        self._running = set()
+
+    def get(self, urls):
+        """({url: version} für die bekannten, ob für eine der Adressen noch eine Abfrage läuft)"""
+        now, known, start = time.monotonic(), {}, []
+        with self._lock:
+            for url in urls:
+                hit = self._cache.get(url)
+                if hit and hit[1]:
+                    known[url] = hit[1]
+                if (not hit or now - hit[0] >= self.ttl) and url not in self._running:
+                    self._running.add(url)
+                    start.append(url)
+            pending = any(url in self._running for url in urls)
+        for url in start:
+            threading.Thread(target=self._load, args=(url,), daemon=True).start()
+        return known, pending
+
+    def reachable(self, urls):
+        """{url: True/False} für die Adressen mit Ergebnis (auch abgelaufene, bis das neue da ist). Fragt nichts ab."""
+        with self._lock:
+            return {url: self._cache[url][2] for url in urls if url in self._cache}
+
+    def _load(self, url):
+        version, up = None, False
+        try:
+            result = self.fetch(url)
+            up, version = result if isinstance(result, tuple) else (result is not None, result)
+        finally:
+            with self._lock:
+                self._cache[url] = (time.monotonic(), version, bool(up))
+                self._running.discard(url)
 
 
 # ---------- Familien-Einstellungen (Entscheid 44) ----------

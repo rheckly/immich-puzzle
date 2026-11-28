@@ -146,13 +146,15 @@ async function toggleLike() {
   } catch (e) { Object.assign(view, before); }
   likeBusy = false; drawLike();
 }
-function vol(tt) { return muted || !view.music ? 0 : musicVolume(tt, P.cfg.T, view.music.volume, view.music.fade); }
+// Ende der Musik: Puzzle-Ende oder, mit «Musik nach dem Puzzle weiterlaufen lassen» (Standard), Ende des Stücks
+const musicStop = () => musicEnd(P.cfg.T, isFinite(audio.duration) ? audio.duration : 0, view.music && view.music.tail !== false);
+function vol(tt) { return muted || !view.music ? 0 : musicVolume(tt, musicStop(), view.music.volume, view.music.fade); }
 function loop(ts) {
   if (!playing) return;
   const dt = Math.min(.1, (ts - last) / 1000) * speed; last = ts;
   let tt = P.t + dt;
   if (synced && view.music && !audio.paused && Math.abs(audio.currentTime - tt) > .3 && audio.currentTime > 0) tt = audio.currentTime;  // im Takt mit der Musik
-  if (tt >= P.cfg.T) { tt = P.cfg.T; playing = false; audio.pause(); }
+  if (tt >= P.cfg.T) { tt = P.cfg.T; playing = false; if (musicStop() <= P.cfg.T) audio.pause(); }
   P.draw(tt);
   audio.volume = clamp(vol(tt), 0, 1);
   if (!playing) { show("bar", true); show("foot", true); }
@@ -172,6 +174,8 @@ function toggleSound() {
   if (!muted && playing && view.music && audio.paused) { audio.currentTime = P.t; audio.play().catch(() => {}); }
   drawTexts();
 }
+// Nach dem Puzzle läuft die Musik weiter: Lautstärke fürs Ausblenden am Ende des Stücks nachführen
+audio.addEventListener("timeupdate", () => { if (!playing && P.cfg && !audio.paused) audio.volume = clamp(vol(audio.currentTime), 0, 1); });
 $("start").onclick = play;
 $("again").onclick = play;
 $("mute").onclick = toggleSound;
